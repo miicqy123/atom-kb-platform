@@ -1,0 +1,738 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm]
+}
+
+model Tenant {
+  id                String            @id @default(cuid())
+  name              String
+  industry          String?
+  logo              String?
+  contactName       String?
+  contactEmail      String?
+  maxWorkspaces     Int               @default(5)
+  maxProjects       Int               @default(20)
+  monthlyTokenQuota BigInt            @default(10000000)
+  storageQuotaMB    Int               @default(10240)
+  status            String            @default("active")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  dimensions        DimensionConfig[]
+  modelConfigs      ModelConfig[]
+  scenarioTags      ScenarioTag[]
+  users             User[]
+  workspaces        Workspace[]
+}
+
+model Workspace {
+  id          String          @id @default(cuid())
+  name        String
+  tenantId    String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  description String?
+  ownerId     String?
+  type        String          @default("TEAM")
+  visibility  String          @default("TEAM")
+  projects    Project[]
+  owner       User?           @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members     WorkspaceUser[]
+}
+
+model Project {
+  id           String        @id @default(cuid())
+  name         String
+  type         String        @default("client")
+  description  String?
+  workspaceId  String
+  ownerId      String
+  status       String        @default("active")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  agents       Agent[]
+  atoms        Atom[]
+  blueprints   Blueprint[]
+  categories   Category[]
+  owner        User          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  qaPairs      QAPair[]
+  raws         Raw[]
+  workflows    Workflow[]
+  workflowRuns WorkflowRun[]
+}
+
+model User {
+  id              String          @id @default(cuid())
+  email           String          @unique
+  name            String
+  passwordHash    String?
+  avatar          String?
+  role            UserRole        @default(READONLY)
+  tenantId        String
+  lastLoginAt     DateTime?
+  status          String          @default("active")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  auditLogs       AuditLog[]
+  ownedProjects   Project[]       @relation("ProjectOwner")
+  reviewTasks     ReviewTask[]    @relation("ReviewAssignee")
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  ownedWorkspaces Workspace[]     @relation("WorkspaceOwner")
+  workspaces      WorkspaceUser[]
+}
+
+model WorkspaceUser {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        UserRole
+  user        User      @relation(fields: [userId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([userId, workspaceId])
+}
+
+model Raw {
+  id                 String            @id @default(cuid())
+  title              String
+  projectId          String
+  format             RawFormat
+  materialType       MaterialType
+  experienceSource   ExperienceSource
+  originalFileUrl    String?
+  originalFileName   String?
+  markdownContent    String?
+  conversionStatus   ConversionStatus  @default(PENDING)
+  verificationStatus String            @default("unverified")
+  exposureLevel      ExposureLevel     @default(INTERNAL)
+  fileSize           Int?
+  metadata           Json?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  atoms              Atom[]
+  processedChunks    ProcessedChunk[]
+  processedQaPairs   ProcessedQaPair[]
+  processedSteps     ProcessedStep[]
+  processedTags      ProcessedTag[]
+  qaPairs            QAPair[]
+  project            Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, conversionStatus])
+}
+
+model Atom {
+  id               String           @id @default(cuid())
+  title            String
+  content          String
+  projectId        String
+  rawId            String?
+  layer            Layer
+  granularity      Granularity      @default(ATOM)
+  dimensions       Int[]
+  slotMappings     String[]
+  experienceSource ExperienceSource
+  exposureLevel    ExposureLevel    @default(INTERNAL)
+  scenarios        Json?
+  status           AssetStatus      @default(DRAFT)
+  version          Int              @default(1)
+  activeVersion    Int              @default(1)
+  wordCount        Int?
+  tokenEstimate    Int?
+  parentAtomId     String?
+  validUntil       DateTime?
+  metadata         Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  parentAtom       Atom?            @relation("AtomHierarchy", fields: [parentAtomId], references: [id])
+  childAtoms       Atom[]           @relation("AtomHierarchy")
+  project          Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  raw              Raw?             @relation(fields: [rawId], references: [id])
+  blueprints       AtomBlueprint[]
+  qaPairs          AtomQAPair[]
+
+  @@index([projectId, status, layer])
+  @@index([dimensions])
+}
+
+model QAPair {
+  id               String       @id @default(cuid())
+  question         String
+  answer           String
+  projectId        String
+  rawId            String?
+  tags             String[]
+  difficulty       QADifficulty @default(BEGINNER)
+  scenarios        String[]
+  questionKeywords String[]
+  materialType     MaterialType
+  status           AssetStatus  @default(DRAFT)
+  version          Int          @default(1)
+  answerWordCount  Int?
+  qualityScore     Float?
+  redlineResults   Json?
+  specialMarks     Json?
+  metadata         Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  atoms            AtomQAPair[]
+  project          Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  raw              Raw?         @relation(fields: [rawId], references: [id])
+
+  @@index([projectId, status])
+}
+
+model Blueprint {
+  id                 String           @id @default(cuid())
+  name               String
+  projectId          String
+  enterprise         String?
+  position           String?
+  taskName           String?
+  workflowMode       WorkflowMode     @default(DAG)
+  status             BlueprintStatus  @default(DRAFT)
+  version            Int              @default(1)
+  activeVersion      Int              @default(1)
+  scenarioTags       Json?
+  totalTokenEstimate Int?
+  qualityPassRate    Float?
+  lastTestTime       DateTime?
+  responsibleId      String?
+  metadata           Json?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  category           String?
+  createdBy          String?
+  description        String?
+  exposureLevel      ExposureLevel    @default(INTERNAL)
+  agentBindings      AgentBlueprint[]
+  atoms              AtomBlueprint[]
+  project            Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  slotConfigs        SlotConfig[]
+  workflowRuns       WorkflowRun[]
+
+  @@index([projectId, status])
+}
+
+model SlotConfig {
+  id               String      @id @default(cuid())
+  blueprintId      String
+  slotKey          String
+  subSlotKey       String?
+  order            Int
+  maxTokens        Int?
+  conflictPriority String[]    @default(["D", "C", "B", "A"])
+  dedupe           Boolean     @default(true)
+  fallbackStrategy String      @default("skip")
+  assembledContent String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  fetchRules       FetchRule[]
+  blueprint        Blueprint   @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  @@unique([blueprintId, slotKey, subSlotKey])
+}
+
+model FetchRule {
+  id           String     @id @default(cuid())
+  slotConfigId String
+  layers       Layer[]
+  dimensions   Int[]
+  subSlots     String[]
+  topN         Int        @default(5)
+  priority     Int        @default(0)
+  createdAt    DateTime   @default(now())
+  slotConfig   SlotConfig @relation(fields: [slotConfigId], references: [id], onDelete: Cascade)
+}
+
+model AtomBlueprint {
+  atomId      String
+  blueprintId String
+  slotKey     String?
+  order       Int       @default(0)
+  atom        Atom      @relation(fields: [atomId], references: [id], onDelete: Cascade)
+  blueprint   Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  @@id([atomId, blueprintId])
+}
+
+model AtomQAPair {
+  atomId   String
+  qaPairId String
+  atom     Atom   @relation(fields: [atomId], references: [id], onDelete: Cascade)
+  qaPair   QAPair @relation(fields: [qaPairId], references: [id], onDelete: Cascade)
+
+  @@id([atomId, qaPairId])
+}
+
+model Agent {
+  id            String           @id @default(cuid())
+  name          String
+  description   String?
+  projectId     String
+  tools         Json?
+  status        String           @default("DRAFT")
+  totalRuns     Int              @default(0)
+  successRate   Float?
+  avgDuration   Float?
+  avgTokens     Float?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  capabilities  String[]
+  category      String?
+  config        Json?
+  createdBy     String?
+  exposureLevel ExposureLevel    @default(INTERNAL)
+  role          String?
+  version       String           @default("1.0")
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  blueprints    AgentBlueprint[]
+}
+
+model AgentBlueprint {
+  agentId     String
+  blueprintId String
+  agent       Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  blueprint   Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  @@id([agentId, blueprintId])
+}
+
+model WorkflowRun {
+  id                  String             @id @default(cuid())
+  blueprintId         String?
+  projectId           String
+  blueprintVersion    Int?
+  workflowMode        WorkflowMode?
+  status              RunStatus          @default(RUNNING)
+  inputData           Json?
+  outputContent       String?
+  tokenUsage          Int?
+  duration            Float?
+  cost                Float?
+  traceId             String?
+  atomVersionSnapshot Json?
+  qaVersionSnapshot   Json?
+  contentPerformance  Json?
+  roiMetrics          Json?
+  conversionOutcome   Json?
+  nodeTraces          Json?
+  startedAt           DateTime           @default(now())
+  completedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  input               Json?
+  startedBy           String?
+  workflowId          String?
+  evaluations         EvaluationRecord[]
+  incidents           Incident[]
+  reviewTasks         ReviewTask[]
+  blueprint           Blueprint?         @relation(fields: [blueprintId], references: [id])
+  project             Project            @relation(fields: [projectId], references: [id])
+
+  @@index([projectId, status])
+  @@index([blueprintId])
+}
+
+model EvaluationRecord {
+  id                 String      @id @default(cuid())
+  workflowRunId      String
+  s8Scores           Json?
+  s9OverallScore     Float?
+  s9Dimensions       Json?
+  redlineScanResults Json?
+  passed             Boolean     @default(false)
+  createdAt          DateTime    @default(now())
+  workflowRun        WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+}
+
+model ReviewTask {
+  id             String       @id @default(cuid())
+  workflowRunId  String
+  triggerReason  String
+  urgency        Urgency      @default(YELLOW)
+  assigneeId     String?
+  status         ReviewStatus @default(PENDING)
+  result         String?
+  modifiedOutput String?
+  feedback       String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  assignee       User?        @relation("ReviewAssignee", fields: [assigneeId], references: [id])
+  workflowRun    WorkflowRun  @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+}
+
+model Incident {
+  id            String           @id @default(cuid())
+  workflowRunId String?
+  type          String
+  severity      IncidentSeverity
+  description   String?
+  rootCause     String?
+  resolution    String?
+  status        String           @default("pending")
+  traceId       String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  workflowRun   WorkflowRun?     @relation(fields: [workflowRunId], references: [id])
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  userId        String
+  action        String
+  entityType    String
+  entityId      String
+  entityName    String?
+  changeSummary String?
+  diff          Json?
+  traceId       String?
+  severity      String   @default("info")
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+}
+
+model DimensionConfig {
+  id          String   @id @default(cuid())
+  number      Int
+  name        String
+  description String?
+  layer       Layer
+  tenantId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@unique([number, tenantId])
+}
+
+model ScenarioTag {
+  id        String   @id @default(cuid())
+  type      String
+  name      String
+  tenantId  String?
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@unique([type, name, tenantId])
+}
+
+model BasePack {
+  id         String   @id @default(cuid())
+  slotKey    String
+  subSlotKey String?
+  content    String
+  scope      String   @default("global")
+  scopeValue String?
+  version    Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([slotKey, subSlotKey, scope, scopeValue])
+}
+
+model Workflow {
+  id            String        @id @default(cuid())
+  name          String
+  description   String?
+  projectId     String
+  category      String?
+  status        String        @default("DRAFT")
+  config        Json?
+  version       String        @default("1.0")
+  exposureLevel ExposureLevel @default(INTERNAL)
+  triggerType   String        @default("MANUAL")
+  createdBy     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status])
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  projectId   String
+  type        String?
+  parentId    String?
+  description String?
+  order       Int      @default(0)
+  color       String?
+  icon        String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, type])
+}
+
+model ProcessedChunk {
+  id          String   @id @default(cuid())
+  rawId       String
+  station     String
+  title       String?
+  content     String
+  tags        String[]
+  processedBy String?
+  projectId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  raw         Raw      @relation(fields: [rawId], references: [id], onDelete: Cascade)
+
+  @@unique([rawId, station])
+}
+
+model ProcessedTag {
+  id          String   @id @default(cuid())
+  rawId       String
+  station     String
+  tags        String[]
+  processedBy String?
+  projectId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  raw         Raw      @relation(fields: [rawId], references: [id], onDelete: Cascade)
+
+  @@unique([rawId, station])
+}
+
+model ProcessedQaPair {
+  id          String   @id @default(cuid())
+  rawId       String
+  question    String
+  answer      String
+  processedBy String?
+  projectId   String?
+  createdAt   DateTime @default(now())
+  raw         Raw      @relation(fields: [rawId], references: [id], onDelete: Cascade)
+}
+
+model ProcessedStep {
+  id          String   @id @default(cuid())
+  rawId       String
+  station     String
+  title       String?
+  content     String
+  tags        String[]
+  processedBy String?
+  projectId   String?
+  createdAt   DateTime @default(now())
+  raw         Raw      @relation(fields: [rawId], references: [id], onDelete: Cascade)
+}
+
+model ModelProvider {
+  id        String          @id @default(cuid())
+  name      String
+  type      String?
+  status    String          @default("ACTIVE")
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  models    Model[]
+  endpoints ModelEndpoint[]
+  rules     RoutingRule[]
+}
+
+model Model {
+  id          String                       @id @default(cuid())
+  name        String
+  providerId  String
+  type        String?
+  status      String                       @default("ACTIVE")
+  config      Json?
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+  provider    ModelProvider                @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  connections RoutingRuleModelConnection[]
+}
+
+model RoutingRule {
+  id               String                       @id @default(cuid())
+  name             String
+  providerId       String
+  weight           Float                        @default(100)
+  priority         Int                          @default(0)
+  enabled          Boolean                      @default(true)
+  projectId        String?
+  createdBy        String?
+  createdAt        DateTime                     @default(now())
+  updatedAt        DateTime                     @updatedAt
+  provider         ModelProvider                @relation(fields: [providerId], references: [id])
+  modelConnections RoutingRuleModelConnection[]
+}
+
+model RoutingRuleModelConnection {
+  id      String      @id @default(cuid())
+  ruleId  String
+  modelId String
+  model   Model       @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  rule    RoutingRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, modelId])
+}
+
+model ModelEndpoint {
+  id          String        @id @default(cuid())
+  providerId  String
+  region      String
+  endpointUrl String
+  apiKey      String
+  rateLimit   Int?
+  status      String        @default("ACTIVE")
+  createdBy   String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  provider    ModelProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+}
+
+model ModelConfig {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  config    Json?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  KNOWLEDGE_EDITOR
+  PROMPT_ENGINEER
+  OPERATOR
+  REVIEWER
+  READONLY
+}
+
+enum RawFormat {
+  WORD
+  PDF
+  PPT
+  EXCEL
+  AUDIO
+  VIDEO
+  SCREENSHOT
+  WEB_LINK
+}
+
+enum MaterialType {
+  THEORY
+  CASE_STUDY
+  METHODOLOGY
+  FAQ
+  SCRIPT
+  REGULATION
+  PRODUCT_DOC
+  TRAINING_MATERIAL
+  MEETING_RECORD
+  CUSTOMER_VOICE
+  INDUSTRY_REPORT
+  COMPETITOR_ANALYSIS
+  INTERNAL_WIKI
+  OTHER
+}
+
+enum ExperienceSource {
+  E1_COMPANY
+  E2_INDUSTRY
+  E3_CROSS_INDUSTRY
+}
+
+enum ConversionStatus {
+  PENDING
+  CONVERTING
+  CONVERTED
+  FAILED
+}
+
+enum AssetStatus {
+  DRAFT
+  TESTING
+  ACTIVE
+  ARCHIVED
+}
+
+enum BlueprintStatus {
+  CONFIGURING
+  TESTING
+  ONLINE
+  DEPRECATED
+  DRAFT
+  REVIEW
+  APPROVED
+  ARCHIVED
+}
+
+enum ExposureLevel {
+  INTERNAL
+  EXTERNAL
+  NEEDS_APPROVAL
+  STRICTLY_FORBIDDEN
+}
+
+enum Layer {
+  A
+  B
+  C
+  D
+}
+
+enum Granularity {
+  ATOM
+  MODULE
+  PACK
+}
+
+enum WorkflowMode {
+  DAG
+  REACT
+  ROLE_COLLABORATION
+  STATEFUL_GRAPH
+}
+
+enum RunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  DEGRADED
+  HUMAN_TAKEOVER
+}
+
+enum ReviewStatus {
+  PENDING
+  IN_PROGRESS
+  APPROVED
+  MODIFIED_APPROVED
+  REJECTED
+  ESCALATED
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum Urgency {
+  RED
+  YELLOW
+  GREEN
+}
+
+enum QADifficulty {
+  BEGINNER
+  INTERMEDIATE
+  PROFESSIONAL
+}
