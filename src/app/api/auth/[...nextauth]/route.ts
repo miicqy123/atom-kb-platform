@@ -1,21 +1,12 @@
-// src/app/api/auth/[...nextauth]/route.ts
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
+import { PrismaClient } from "@prisma/client";
 
-// Mock users for development
-const mockUsers = [
-  {
-    id: "1",
-    email: "admin@demo.com",
-    name: "Admin User",
-    role: "SUPER_ADMIN",
-    tenantId: "demo-tenant",
-    passwordHash: "$2a$10$9UJdZgTk803bsfm140sO.e5XECJGHtGCKFcZJqJS4G2Gl5zG6uHlO" // Hash for "password"
-  }
-];
+const prisma = new PrismaClient();
 
 const handler = NextAuth({
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   providers: [
     Credentials({
       name: "credentials",
@@ -26,12 +17,12 @@ const handler = NextAuth({
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        // Find user in mock data
-        const user = mockUsers.find(u => u.email === credentials?.email);
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email as string },
+        });
 
         if (!user || !user.passwordHash) return null;
 
-        // Compare the provided password with the hashed password
         const valid = await compare(credentials.password as string, user.passwordHash);
         if (!valid) return null;
 
@@ -40,7 +31,7 @@ const handler = NextAuth({
           email: user.email,
           name: user.name,
           role: user.role,
-          tenantId: user.tenantId
+          tenantId: user.tenantId,
         };
       },
     }),
@@ -48,16 +39,16 @@ const handler = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as any).role;
-        token.tenantId = (user as any).tenantId;
+        token.role = user.role;
+        token.tenantId = user.tenantId;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.sub!;
-        (session.user as any).role = token.role;
-        (session.user as any).tenantId = token.tenantId;
+        session.user.id = token.sub;
+        session.user.role = token.role;
+        session.user.tenantId = token.tenantId;
       }
       return session;
     },
