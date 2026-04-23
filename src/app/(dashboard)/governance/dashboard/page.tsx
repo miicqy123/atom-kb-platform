@@ -13,6 +13,7 @@ import { Activity, Shield, Coins, AlertTriangle } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
 const COLORS = ["#2563EB", "#8B5CF6", "#F59E0B", "#16A34A", "#DC2626"];
+const SMALL_TICK = { fontSize: 10 };
 
 const MOCK_RUN_TREND = Array.from({ length: 14 }, (_, i) => ({
   day: `4/${i + 1}`,
@@ -58,7 +59,6 @@ export default function GovernanceDashboard() {
 
   const { data: incidents } = trpc.analytics.incidentList.useQuery({});
 
-  // ✅ 修复 1：给 reduce 加上类型标注
   const runStats: any[] = projectDashboardData?.workflowStats || [];
   const totalRuns = runStats.reduce((sum: number, stat: any) => sum + (stat._count ?? 0), 0);
   const successRate = totalRuns > 0
@@ -98,8 +98,8 @@ export default function GovernanceDashboard() {
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={MOCK_RUN_TREND}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" tick= fontSize: 10  />
-                <YAxis tick= fontSize: 10  />
+                <XAxis dataKey="day" tick={SMALL_TICK} />
+                <YAxis tick={SMALL_TICK} />
                 <Tooltip />
                 <Bar dataKey="runs" fill="#2563EB" name="总运行" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="success" fill="#16A34A" name="成功" radius={[4, 4, 0, 0]} />
@@ -127,9 +127,9 @@ export default function GovernanceDashboard() {
                 })) || []}
               >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" tick= fontSize: 10  />
-                <YAxis yAxisId="left" domain={[0, 100]} tick= fontSize: 10  />
-                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick= fontSize: 10  />
+                <XAxis dataKey="day" tick={SMALL_TICK} />
+                <YAxis yAxisId="left" domain={[0, 100]} tick={SMALL_TICK} />
+                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={SMALL_TICK} />
                 <Tooltip />
                 <Line yAxisId="left" type="monotone" dataKey="s8" stroke="#2563EB" strokeWidth={2} name="S8 通过率" />
                 <Line yAxisId="right" type="monotone" dataKey="s9" stroke="#8B5CF6" strokeWidth={2} name="S9 评分" />
@@ -143,7 +143,6 @@ export default function GovernanceDashboard() {
         <div className="space-y-6">
           <div className="grid grid-cols-3 gap-4">
             <StatsCard title="月成本" value="¥12,350" color="text-orange-600" />
-            {/* ✅ 修复 2：给这里的 reduce 也加上类型标注 */}
             <StatsCard
               title="日均 Token"
               value={
