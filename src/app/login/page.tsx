@@ -8,10 +8,13 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
       const result = await signIn('credentials', {
         email,
@@ -20,37 +23,32 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(result.error);
+        setError('登录失败：邮箱或密码错误');
       } else {
-        router.push('/'); // Redirect to home after successful login
+        router.push('/');
         router.refresh();
       }
     } catch (error) {
-      setError('An error occurred during login');
+      setError('登录时发生网络错误，请重试');
       console.error('Login error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Development mode login bypass
-  const handleDevLogin = () => {
-    // This will simulate a successful login
-    localStorage.setItem('devAuthToken', 'dev-token');
-    router.push('/');
-    router.refresh();
-  };
-
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-96">
-        <h1 className="text-2xl font-bold mb-6 text-center">Login</h1>
-        <form onSubmit={handleSubmit}>
-          {error && <div className="mb-4 p-2 text-red-600 bg-red-50 rounded">{error}</div>}
-          <div className="mb-4">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email
-            </label>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-6 p-8 bg-white rounded-xl shadow-lg">
+        <h2 className="text-2xl font-bold text-center">Atom KB Platform</h2>
+
+        {error && (
+          <p className="text-red-500 text-sm bg-red-50 p-3 rounded-lg">{error}</p>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
-              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -58,12 +56,10 @@ export default function LoginPage() {
               required
             />
           </div>
-          <div className="mb-6">
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input
-              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -71,28 +67,19 @@ export default function LoginPage() {
               required
             />
           </div>
+
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            disabled={loading}
+            className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
-            Sign In
+            {loading ? '登录中...' : 'Sign In'}
           </button>
         </form>
 
-        <div className="mt-6">
-          <button
-            onClick={handleDevLogin}
-            className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-          >
-            Dev Login (Bypass Auth)
-          </button>
-        </div>
-
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
-            Demo credentials: admin@example.com / password123
-          </p>
-        </div>
+        <p className="text-center text-sm text-gray-500">
+          Demo: admin@example.com / password123
+        </p>
       </div>
     </div>
   );

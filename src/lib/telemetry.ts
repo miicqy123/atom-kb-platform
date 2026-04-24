@@ -1,10 +1,8 @@
-// src/lib/telemetry.ts
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { Counter, Histogram, register } from 'prom-client';
 
-// ── Prometheus Metrics ────────────────────────────────────────────
+// 防止热重载时重复注册
+try { register.clear(); } catch(e) {}
+
 export const metrics = {
   runTotal: new Counter({
     name: 'atom_kb_run_total',
@@ -34,7 +32,6 @@ export const metrics = {
   }),
 };
 
-// ── Trace 结构化日志 ──────────────────────────────────────────────
 export function logTrace(event: {
   traceId: string;
   node: string;
@@ -44,16 +41,18 @@ export function logTrace(event: {
   score?: number;
   slotKey?: string;
 }) {
-  // 写入 Prometheus metrics
-  metrics.runDuration.observe(event.durationMs / 1000);
-  if (event.slotKey && event.score != null) {
-    metrics.s8ScoreGauge.observe({ slotKey: event.slotKey }, event.score);
-  }
-  if (event.tokens) {
-    metrics.tokenUsage.inc({ model: 'gpt-4o-mini' }, event.tokens);
+  try {
+    metrics.runDuration.observe(event.durationMs / 1000);
+    if (event.slotKey && event.score != null) {
+      metrics.s8ScoreGauge.observe({ slotKey: event.slotKey }, event.score);
+    }
+    if (event.tokens) {
+      metrics.tokenUsage.inc({ model: 'qwen-turbo' }, event.tokens);
+    }
+  } catch (e) {
+    // 静默处理
   }
 
-  // 结构化日志（生产可对接 Loki）
   console.log(JSON.stringify({
     ts: new Date().toISOString(),
     level: event.passed ? 'info' : 'warn',

@@ -9,6 +9,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "npx tsx prisma/seed.ts",
+    "seed:demo": "npx tsx prisma/seed-demo.ts",
     "db:studio": "prisma studio",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
@@ -65,6 +66,7 @@
     "zustand": "^4.5.7"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.4.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/flexsearch": "^0.7.6",
     "@types/node": "^20.12.0",
