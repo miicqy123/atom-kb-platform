@@ -6,6 +6,14 @@ import { Textarea } from '@/components/ui/Textarea';
 import { trpc } from '@/lib/trpc';
 import { useToast } from '@/hooks/use-toast';
 
+// 在组件函数外添加映射函数
+function toApiStatus(s: string): 'DRAFT' | 'ARCHIVED' | 'REVIEW' | 'APPROVED' {
+  if (s === 'ACTIVE') return 'APPROVED';
+  if (s === 'TESTING') return 'REVIEW';
+  if (s === 'ARCHIVED') return 'ARCHIVED';
+  return 'DRAFT';
+}
+
 interface QADialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -22,7 +30,7 @@ export default function QADialog({ open, onOpenChange, projectId, qaPair, onComp
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [currentTag, setCurrentTag] = useState('');
-  const [status, setStatus] = useState('DRAFT');
+  const [status, setStatus] = useState<'DRAFT' | 'TESTING' | 'ACTIVE' | 'ARCHIVED'>('DRAFT');
 
   const utils = trpc.useUtils();
   const { toast } = useToast();
@@ -33,7 +41,7 @@ export default function QADialog({ open, onOpenChange, projectId, qaPair, onComp
         title: '创建成功',
         description: 'QA对已成功创建',
       });
-      utils.qaPair.list.invalidate(); // 使缓存失效
+      utils.qaPair.getAll.invalidate(); // 使缓存失效
       resetForm();
       onComplete?.();
     },
@@ -52,7 +60,7 @@ export default function QADialog({ open, onOpenChange, projectId, qaPair, onComp
         title: '更新成功',
         description: 'QA对已成功更新',
       });
-      utils.qaPair.list.invalidate(); // 使缓存失效
+      utils.qaPair.getAll.invalidate(); // 使缓存失效
       resetForm();
       onComplete?.();
     },
@@ -133,7 +141,7 @@ export default function QADialog({ open, onOpenChange, projectId, qaPair, onComp
       scenarios,
       tags,
       questionKeywords: question.split(/\s+/).filter(word => word.length > 2), // 提取关键词
-      status,
+      status: toApiStatus(status),
     };
 
     if (isEditing) {
@@ -141,10 +149,10 @@ export default function QADialog({ open, onOpenChange, projectId, qaPair, onComp
       updateQAMutation.mutate({
         id: qaPair.id,
         ...qaData
-      });
+      } as any);
     } else {
       // 创建新QA对
-      createQAMutation.mutate(qaData);
+      createQAMutation.mutate({ ...qaData, status: toApiStatus(status) } as any);
     }
   };
 
@@ -239,7 +247,7 @@ export default function QADialog({ open, onOpenChange, projectId, qaPair, onComp
               <select
                 id="status"
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
+                onChange={(e) => setStatus(e.target.value as any)}
                 className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand"
               >
                 <option value="DRAFT">草稿</option>

@@ -27,3 +27,48 @@ export function getModulePermission(role: UserRole, module: Module): Permission 
 export function canAccessModule(role: UserRole, module: Module): boolean {
   return PERMISSION_MATRIX[role][module] !== "none";
 }
+
+// New granular permissions system
+const ROLE_PERMISSIONS: Record<string, string[]> = {
+  SUPER_ADMIN: ['*'],
+  TENANT_ADMIN: ['*'],
+  KNOWLEDGE_EDITOR: [
+    'atom:read', 'atom:write', 'atom:activate',
+    'blueprint:read', 'blueprint:write',
+    'qa:read', 'qa:write',
+    'raw:read', 'raw:write', 'raw:process',
+    'workflow:run', 'review:read',
+  ],
+  PROMPT_ENGINEER: [
+    'atom:read', 'atom:write',
+    'blueprint:read', 'blueprint:write', 'blueprint:assemble',
+    'qa:read', 'qa:write',
+    'raw:read', 'raw:write',
+    'workflow:run', 'review:read',
+  ],
+  OPERATOR: [
+    'atom:read', 'atom:write',
+    'blueprint:read', 'blueprint:assemble',
+    'qa:read', 'qa:write',
+    'raw:read', 'raw:process',
+    'workflow:run', 'review:read',
+  ],
+  REVIEWER: [
+    'atom:read', 'blueprint:read', 'qa:read',
+    'review:read', 'review:resolve',
+  ],
+  READONLY: [
+    'atom:read', 'blueprint:read', 'qa:read', 'review:read',
+  ],
+};
+
+export function hasPermission(role: string, permission: string): boolean {
+  const perms = ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS] || [];
+  return perms.includes('*') || perms.includes(permission);
+}
+
+export function requirePermission(role: string, permission: string) {
+  if (!hasPermission(role, permission)) {
+    throw new Error(`权限不足：需要 ${permission}，当前角色 ${role}`);
+  }
+}

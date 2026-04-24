@@ -125,9 +125,9 @@ export default function AgentDialog({ open, onOpenChange, agent, projectId, onCo
         role: form.role,
         description: form.description,
         category: form.category,
-        status: form.status,
+        status: form.status as any,
         version: form.version,
-        exposureLevel: form.exposureLevel,
+        exposureLevel: form.exposureLevel as any,
       });
     } else {
       createAgentMutation.mutate({
@@ -136,9 +136,9 @@ export default function AgentDialog({ open, onOpenChange, agent, projectId, onCo
         role: form.role,
         description: form.description,
         category: form.category,
-        status: form.status,
+        status: form.status as any,
         version: form.version,
-        exposureLevel: form.exposureLevel,
+        exposureLevel: form.exposureLevel as any,
       });
     }
   };

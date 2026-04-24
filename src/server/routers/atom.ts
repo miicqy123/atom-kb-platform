@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../trpc";
+import { protectedProcedure, router, permissionProcedure } from "../trpc";
 
 export const atomRouter = router({
   // 获取所有原子块
@@ -42,6 +42,14 @@ export const atomRouter = router({
         take: limit,
         skip: offset,
         orderBy: { createdAt: 'desc' },
+        include: {
+          blueprints: {
+            include: {
+              blueprint: { select: { id: true, name: true } }
+            }
+          },
+          raw: { select: { id: true, title: true } },
+        },
       });
 
       const totalCount = await ctx.prisma.atom.count({
@@ -147,10 +155,20 @@ export const atomRouter = router({
         throw new Error('Project not found');
       }
 
-      return ctx.prisma.atom.update({
-        where: { id },
+      // 修改原子块前，查出关联蓝图并通知
+      const linkedBlueprints = await ctx.prisma.atomBlueprint.findMany({
+        where: { atomId: input.id },
+        include: { blueprint: { select: { id: true, name: true } } },
+      });
+
+      // 执行实际更新
+      const updated = await ctx.prisma.atom.update({
+        where: { id: input.id },
         data: updateData,
       });
+
+      // 返回关联蓝图清单，前端弹出提示
+      return { atom: updated, affectedBlueprints: linkedBlueprints.map(lb => lb.blueprint) };
     }),
 
   // 删除原子块
@@ -175,6 +193,12 @@ export const atomRouter = router({
 
       if (!project) {
         throw new Error('Project not found');
+      }
+
+      // 删除前检查：有关联蓝图则拒绝
+      const linkedCount = await ctx.prisma.atomBlueprint.count({ where: { atomId: input.id } });
+      if (linkedCount > 0) {
+        throw new Error(`该原子块被 ${linkedCount} 条蓝图引用，请先解除关联再删除`);
       }
 
       return ctx.prisma.atom.delete({
@@ -264,5 +288,111 @@ export const atomRouter = router({
           },
         },
       });
+    }),
+
+  // 批量激活原子块
+  batchActivate: permissionProcedure('atom:activate')
+    .input(z.object({
+      ids: z.array(z.string()),
+      projectId: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.prisma.atom.updateMany({
+        where: {
+          id: { in: input.ids },
+          projectId: input.projectId
+        },
+        data: { status: 'ACTIVE' },
+      });
+      return { count: result.count };
+    }),
+
+  // 批量归档原子块
+  batchArchive: protectedProcedure
+    .input(z.object({
+      ids: z.array(z.string())
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.prisma.atom.updateMany({
+        where: { id: { in: input.ids } },
+        data: { status: 'ARCHIVED' },
+      });
+      return { count: result.count };
+    }),
+
+  // 更新标签
+  updateTags: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      layer: z.enum(['A','B','C','D']),
+      slotMappings: z.array(z.string()),
+      dimensions: z.array(z.number()),
+      granularity: z.enum(['ATOM','MODULE','PACK']),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      return ctx.prisma.atom.update({
+        where: { id: input.id },
+        data: {
+          layer: input.layer,
+          slotMappings: input.slotMappings,
+          dimensions: input.dimensions,
+          granularity: input.granularity,
+        },
+      });
+    }),
+
+  // 创建新版本（保留旧版本快照）
+  createVersion: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const original = await ctx.prisma.atom.findUniqueOrThrow({ where: { id: input.id } });
+
+      // 将当前版本快照存入 AuditLog
+      await ctx.prisma.auditLog.create({
+        data: {
+          userId: ctx.session.user.id,
+          action: 'VERSION_SNAPSHOT',
+          entityType: 'ATOM',
+          entityId: input.id,
+          entityName: original.title,
+          changeSummary: `Version ${original.version} snapshot`,
+          diff: {
+            before: original,
+            reason: input.reason,
+          },
+        },
+      });
+
+      // 升级版本号
+      const updated = await ctx.prisma.atom.update({
+        where: { id: input.id },
+        data: { version: { increment: 1 } },
+      });
+
+      return { atom: updated, snapshotVersion: original.version };
+    }),
+
+  // 获取历史版本列表
+  getVersionHistory: protectedProcedure
+    .input(z.object({ atomId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      const logs = await ctx.prisma.auditLog.findMany({
+        where: {
+          entityId: input.atomId,
+          entityType: 'ATOM',
+          action: 'VERSION_SNAPSHOT',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      return logs.map(l => ({
+        id: l.id,
+        version: (l.diff as any)?.before?.version,
+        content: (l.diff as any)?.before?.content,
+        reason: (l.diff as any)?.reason,
+        createdAt: l.createdAt,
+      }));
     }),
 });

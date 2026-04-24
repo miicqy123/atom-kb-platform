@@ -4,45 +4,38 @@ import { router, withPermission } from "../trpc";
 export const evaluationRouter = router({
   listByBlueprint: withPermission("prompts", "read").input(z.object({ blueprintId: z.string() })).query(({ ctx, input }) => ctx.prisma.evaluationRecord.findMany({ where: { workflowRun: { blueprintId: input.blueprintId } }, orderBy: { createdAt: "desc" }, take: 50 })),
   getStats: withPermission("prompts", "read").query(({ ctx }) => {
-    return ctx.prisma.evaluationRecord.groupBy({
-      by: ['status'],
+    return ctx.prisma.evaluationRecord.aggregate({
       _count: {
         _all: true,
       },
       _avg: {
-        s8_score: true,
-        s9_score: true,
+        s9OverallScore: true,
       },
     });
   }),
   create: withPermission("prompts", "write").input(z.object({
     workflowRunId: z.string(),
-    s8_score: z.number().min(0).max(100),
-    s9_score: z.number().min(0).max(100),
-    status: z.string(),
+    s8Scores: z.number().min(0).max(100),
+    s9OverallScore: z.number().min(0).max(100),
     details: z.any().optional(),
   })).mutation(({ ctx, input }) => {
     return ctx.prisma.evaluationRecord.create({
       data: {
         workflowRunId: input.workflowRunId,
-        s8_score: input.s8_score,
-        s9_score: input.s9_score,
-        status: input.status,
-        details: input.details,
-        createdBy: ctx.user.id,
+        s8Scores: input.s8Scores,
+        s9OverallScore: input.s9OverallScore,
       }
     });
   }),
   update: withPermission("prompts", "write").input(z.object({
     id: z.string(),
-    s8_score: z.number().min(0).max(100).optional(),
-    s9_score: z.number().min(0).max(100).optional(),
-    status: z.string().optional(),
+    s8Scores: z.number().min(0).max(100).optional(),
+    s9OverallScore: z.number().min(0).max(100).optional(),
     details: z.any().optional(),
   })).mutation(({ ctx, input }) => {
     return ctx.prisma.evaluationRecord.update({
       where: { id: input.id },
-      data: input
+      data: input as any
     });
   }),
   delete: withPermission("prompts", "write").input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
@@ -58,13 +51,13 @@ export const evaluationRouter = router({
       take: input.limit,
       select: {
         id: true,
-        s8_score: true,
-        s9_score: true,
+        s8Scores: true,
+        s9OverallScore: true,
         createdAt: true,
+        passed: true,
         workflowRun: {
           select: {
             id: true,
-            name: true,
           }
         }
       }

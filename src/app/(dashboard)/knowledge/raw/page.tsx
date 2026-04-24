@@ -1,8 +1,7 @@
 "use client";
-
 import { useState, useEffect } from 'react';
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Upload, FileText, Database, Settings, Search, Eye, Trash2, AlertCircle, CheckCircle, Clock } from "lucide-react";
+import { Upload, FileText, Database, Settings, Search, Eye, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
@@ -15,15 +14,13 @@ import UploadDialog from '@/components/knowledge/UploadDialog';
 export default function RawMaterialsPage() {
   const { toast } = useToast();
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState('test-project'); // 后续应该从上下文获取
+  const [selectedProjectId, setSelectedProjectId] = useState('test-project');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterFormat, setFilterFormat] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState('ALL');
 
-  // 获取当前用户信息
   const { data: userData } = trpc.user.getCurrent.useQuery();
 
-  // 获取项目列表
   const { data: projectsData, isLoading: projectsLoading } = trpc.project.list.useQuery({
     workspaceId: userData?.workspaces?.[0]?.workspaceId || 'default-workspace-id',
     limit: 100
@@ -31,7 +28,6 @@ export default function RawMaterialsPage() {
     enabled: !!userData
   });
 
-  // 根据选择的项目获取素材数据
   const {
     data: rawData,
     isLoading: rawLoading,
@@ -44,64 +40,58 @@ export default function RawMaterialsPage() {
     enabled: !!selectedProjectId
   });
 
-  // 获取统计数据
   const { data: statsData } = trpc.raw.getStats.useQuery({
     projectId: selectedProjectId
   }, {
     enabled: !!selectedProjectId
   });
 
-  // 删除素材的mutation
   const deleteMutation = trpc.raw.delete.useMutation({
     onSuccess: () => {
-      toast({
-        title: "删除成功",
-        description: "素材已成功删除",
-      });
-      refetch(); // 刷新数据
+      toast({ title: "删除成功", description: "素材已成功删除" });
+      refetch();
     },
     onError: (error) => {
-      toast({
-        title: "删除失败",
-        description: error.message || "删除素材时出现错误",
-        variant: "destructive",
-      });
+      toast({ title: "删除失败", description: error.message || "删除素材时出现错误", variant: "destructive" });
     },
   });
 
-  // 初始化第一个项目ID
+  // ── 新增：生产线触发 ──────────────────────────────────────────
+  const processMutation = trpc.pipeline.processRaw.useMutation({
+    onSuccess: (data) => {
+      toast({ title: `处理完成，生成 ${data.atomsCreated} 个原子块` });
+      refetch();
+    },
+    onError: (e) => toast({ title: '处理失败', description: e.message, variant: 'destructive' }),
+  });
+  // ─────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (projectsData?.items && projectsData.items.length > 0 && !selectedProjectId) {
       setSelectedProjectId(projectsData.items[0].id);
     }
   }, [projectsData, selectedProjectId]);
 
-  // 处理删除操作
   const handleDelete = (id: string) => {
     if (confirm("确定要删除这个素材吗？此操作不可撤销。")) {
       deleteMutation.mutate({ id });
     }
   };
 
-  // 获取统计数据
-  const totalFiles = statsData?.total || 0;
-  const convertedFiles = statsData?.byStatus?.find((s: any) => s.conversionStatus === 'CONVERTED')?._count || 0;
-  const pendingFiles = statsData?.byStatus?.find((s: any) => s.conversionStatus === 'PENDING')?._count || 0;
-  const processingFiles = statsData?.byStatus?.find((s: any) => s.conversionStatus === 'CONVERTING')?._count || 0;
+  const totalFiles = Number(statsData?.total || 0);
+  const convertedFiles = Number(statsData?.byStatus?.find((s: any) => s.conversionStatus === 'CONVERTED')?._count || 0);
+  const pendingFiles = Number(statsData?.byStatus?.find((s: any) => s.conversionStatus === 'PENDING')?._count || 0);
+  const processingFiles = Number(statsData?.byStatus?.find((s: any) => s.conversionStatus === 'CONVERTING')?._count || 0);
 
-  // 过滤后的文件列表
   const filteredFiles = rawData?.items?.filter(file => {
     const matchesSearch = !searchTerm ||
       file.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (file.originalFileName && file.originalFileName.toLowerCase().includes(searchTerm.toLowerCase()));
-
     const matchesFormat = filterFormat === 'ALL' || file.format === filterFormat;
     const matchesStatus = filterStatus === 'ALL' || file.conversionStatus === filterStatus;
-
     return matchesSearch && matchesFormat && matchesStatus;
   }) || [];
 
-  // 转换状态到显示文本
   const getStatusDisplay = (status: string) => {
     switch(status) {
       case 'CONVERTED': return '已处理';
@@ -112,7 +102,6 @@ export default function RawMaterialsPage() {
     }
   };
 
-  // 转换状态到Badge颜色
   const getStatusBadgeVariant = (status: string) => {
     switch(status) {
       case 'CONVERTED': return 'success';
@@ -123,7 +112,6 @@ export default function RawMaterialsPage() {
     }
   };
 
-  // 获取图标组件
   const getFileIcon = (format: string) => {
     switch(format) {
       case 'PDF': return <FileText className="h-5 w-5 text-red-500" />;
@@ -148,14 +136,12 @@ export default function RawMaterialsPage() {
           </Button>
         }
       />
-
       <UploadDialog
         open={isUploadDialogOpen}
         onOpenChange={setIsUploadDialogOpen}
         projectId={selectedProjectId}
       />
 
-      {/* 项目选择器 - 如果有多个项目 */}
       {projectsData?.items && projectsData.items.length > 1 && (
         <Card>
           <CardHeader>
@@ -196,29 +182,26 @@ export default function RawMaterialsPage() {
                 <p className="text-xs text-muted-foreground">+18% 上月</p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">已处理</CardTitle>
                 <Database className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{convertedFiles}</div>
+                <div className="text-2xl font-bold">{Number(convertedFiles)}</div>
                 <p className="text-xs text-muted-foreground">+22% 上月</p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">待处理</CardTitle>
                 <Settings className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{pendingFiles}</div>
+                <div className="text-2xl font-bold">{Number(pendingFiles)}</div>
                 <p className="text-xs text-muted-foreground">-5 今日</p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">成功率</CardTitle>
@@ -226,7 +209,7 @@ export default function RawMaterialsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {totalFiles > 0 ? Math.round((convertedFiles / totalFiles) * 100) + '%' : '0%'}
+                  {Number(totalFiles) > 0 ? Math.round((Number(convertedFiles) / Number(totalFiles)) * 100) + '%' : '0%'}
                 </div>
                 <p className="text-xs text-muted-foreground">+1.2% 上月</p>
               </CardContent>
@@ -258,6 +241,16 @@ export default function RawMaterialsPage() {
                       <Button variant="ghost" size="sm">
                         <Eye className="h-4 w-4" />
                       </Button>
+                      {/* ── 新增：生产线按钮 ── */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => processMutation.mutate({ rawId: file.id, projectId: selectedProjectId })}
+                        disabled={processMutation.isPending || file.conversionStatus === 'CONVERTED'}
+                      >
+                        {processMutation.isPending ? '处理中…' : '▶ 生产线'}
+                      </Button>
+                      {/* ───────────────────── */}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -270,14 +263,10 @@ export default function RawMaterialsPage() {
                   </div>
                 ))}
                 {filteredFiles.length === 0 && !rawLoading && (
-                  <div className="text-center py-8 text-gray-500">
-                    暂无文件，请点击上传素材
-                  </div>
+                  <div className="text-center py-8 text-gray-500">暂无文件，请点击上传素材</div>
                 )}
                 {rawLoading && (
-                  <div className="text-center py-8 text-gray-500">
-                    加载中...
-                  </div>
+                  <div className="text-center py-8 text-gray-500">加载中...</div>
                 )}
               </div>
             </CardContent>
@@ -351,9 +340,7 @@ export default function RawMaterialsPage() {
                             <div className="ml-2 font-medium">{file.title}</div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {file.format}
-                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{file.format}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {file.fileSize ? (file.fileSize / 1024 / 1024).toFixed(1) + ' MB' : 'N/A'}
                         </td>
@@ -374,6 +361,17 @@ export default function RawMaterialsPage() {
                           >
                             <Eye className="h-4 w-4 text-blue-600" />
                           </Button>
+                          {/* ── 新增：生产线按钮 ── */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => processMutation.mutate({ rawId: file.id, projectId: selectedProjectId })}
+                            disabled={processMutation.isPending || file.conversionStatus === 'CONVERTED'}
+                            className="mr-2"
+                          >
+                            {processMutation.isPending ? '处理中…' : '▶ 生产线'}
+                          </Button>
+                          {/* ───────────────────── */}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -387,16 +385,12 @@ export default function RawMaterialsPage() {
                     ))}
                     {filteredFiles.length === 0 && !rawLoading && (
                       <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
-                          暂无匹配的文件
-                        </td>
+                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">暂无匹配的文件</td>
                       </tr>
                     )}
                     {rawLoading && (
                       <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
-                          加载中...
-                        </td>
+                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">加载中...</td>
                       </tr>
                     )}
                   </tbody>
@@ -427,7 +421,6 @@ export default function RawMaterialsPage() {
                         {getStatusDisplay(item.conversionStatus)}
                       </Badge>
                     </div>
-
                     <div className="mt-3">
                       <div className="flex justify-between text-sm mb-1">
                         <span>进度</span>
@@ -437,35 +430,36 @@ export default function RawMaterialsPage() {
                         </span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${
-                            item.conversionStatus === 'CONVERTED' ? 'bg-green-500' :
-                            item.conversionStatus === 'CONVERTING' ? 'bg-blue-500' : 'bg-yellow-500'
-                          }`}
-                          style={{
-                            width: item.conversionStatus === 'CONVERTED' ? '100%' :
-                                   item.conversionStatus === 'CONVERTING' ? '65%' : '0%'
-                          }}
-                        ></div>
+                        {(() => {
+                          const barWidth = item.conversionStatus === 'CONVERTED' ? '100%'
+                            : item.conversionStatus === 'CONVERTING' ? '65%'
+                            : '0%';
+                          const barColor = item.conversionStatus === 'CONVERTED' ? 'bg-green-500'
+                            : item.conversionStatus === 'CONVERTING' ? 'bg-blue-500' : 'bg-yellow-500';
+                          return (
+                            <div
+                              className={`h-2 rounded-full ${barColor}`}
+                              style={{ width: barWidth }}
+                            ></div>
+                          );
+                        })()}
                       </div>
                       <p className="text-xs text-gray-500 mt-1">
-                        ETA: {item.conversionStatus === 'CONVERTED' ? '已完成' :
-                              item.conversionStatus === 'CONVERTING' ? '预计5分钟' : '即将开始'}
+                        {(() => {
+                          const etaText = item.conversionStatus === 'CONVERTED' ? '已完成'
+                            : item.conversionStatus === 'CONVERTING' ? '预计5分钟'
+                            : '即将开始';
+                          return `ETA: ${etaText}`;
+                        })()}
                       </p>
                     </div>
                   </Card>
                 ))}
-
                 {filteredFiles.filter(f => f.conversionStatus !== 'CONVERTED').length === 0 && !rawLoading && (
-                  <div className="text-center py-8 text-gray-500">
-                    所有文件都已处理完成
-                  </div>
+                  <div className="text-center py-8 text-gray-500">所有文件都已处理完成</div>
                 )}
-
                 {rawLoading && (
-                  <div className="text-center py-8 text-gray-500">
-                    加载中...
-                  </div>
+                  <div className="text-center py-8 text-gray-500">加载中...</div>
                 )}
               </div>
             </CardContent>
@@ -488,7 +482,6 @@ export default function RawMaterialsPage() {
                     <option>低优先级</option>
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">格式转换选项</label>
                   <div className="space-y-2">
@@ -506,7 +499,6 @@ export default function RawMaterialsPage() {
                     </div>
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">存储保留策略</label>
                   <select className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand">
@@ -516,10 +508,7 @@ export default function RawMaterialsPage() {
                     <option>保存1个月</option>
                   </select>
                 </div>
-
-                <Button className="w-full bg-brand hover:bg-brand-dark text-white">
-                  保存配置
-                </Button>
+                <Button className="w-full bg-brand hover:bg-brand-dark text-white">保存配置</Button>
               </div>
             </CardContent>
           </Card>

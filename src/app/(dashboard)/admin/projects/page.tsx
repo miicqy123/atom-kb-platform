@@ -192,8 +192,7 @@ export default function ProjectManagementPage() {
       updateProject.mutate({
         id: editingProject.id,
         name: editingProject.name,
-        description: editingProject.description,
-        visibility: editingProject.visibility
+        description: editingProject.description
       });
     }
   };

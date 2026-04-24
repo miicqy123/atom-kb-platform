@@ -200,7 +200,7 @@ export const workspaceRouter = router({
     .input(z.object({
       workspaceId: z.string(),
       userEmail: z.string().email(),
-      role: z.enum(['MEMBER', 'SUPER_ADMIN', 'TENANT_ADMIN']),
+      role: z.enum(['OPERATOR', 'SUPER_ADMIN', 'TENANT_ADMIN']),
     }))
     .mutation(async ({ ctx, input }) => {
       // 检查用户是否有权限邀请他人
@@ -291,10 +291,10 @@ export const workspaceRouter = router({
       // 移除成员
       return ctx.prisma.workspaceUser.delete({
         where: {
-          workspaceId_userId: {
-            workspaceId: input.workspaceId,
+          userId_workspaceId: {
             userId: input.userId,
-          },
+            workspaceId: input.workspaceId,
+          }
         },
       });
     }),

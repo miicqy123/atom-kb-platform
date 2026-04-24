@@ -98,15 +98,6 @@ export default function BasePackDialog({ open, onOpenChange, pack, onComplete }:
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name.trim()) {
-      toast({
-        title: '错误',
-        description: '请输入蓝图名称',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     if (!content.trim()) {
       toast({
         title: '错误',
@@ -120,14 +111,12 @@ export default function BasePackDialog({ open, onOpenChange, pack, onComplete }:
       // 更新现有蓝图
       updatePackMutation.mutate({
         id: pack.id,
-        name,
         content,
         scope
-      });
+      } as any);
     } else {
       // 创建新蓝图
       createPackMutation.mutate({
-        name,
         slotKey,
         content,
         scope

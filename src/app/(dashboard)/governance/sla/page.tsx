@@ -31,7 +31,10 @@ const MOCK_SLA_DATA = ROLES.map(role => ({
 
 export default function SLAMonitoringPage() {
   const [timeRange, setTimeRange] = useState("24h");
-  const { currentProject } = useProjectStore();
+  const { projectId } = useProjectStore();
+
+  const { data: runStats } = trpc.analytics.getRunStats?.useQuery?.() ?? { data: null };
+  const { data: qualityStats } = trpc.analytics.getQualityStats?.useQuery?.() ?? { data: null };
 
   return (
     <div>

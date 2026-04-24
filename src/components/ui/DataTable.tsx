@@ -1,6 +1,8 @@
 "use client";
 
-export interface Column<T> { key: string; label: string; render?: (row: T) => React.ReactNode; width?: string; }
+import React from 'react';
+
+export interface Column<T> { key: string; label: React.ReactNode; render?: (row: T) => React.ReactNode; width?: string; }
 
 export function DataTable<T extends Record<string, any>>({ columns, data, onRowClick, loading, emptyMessage = "暂无数据" }: { columns: Column<T>[]; data: T[]; onRowClick?: (row: T) => void; loading?: boolean; emptyMessage?: string }) {
   if (loading) return <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" /></div>;

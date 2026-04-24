@@ -111,10 +111,10 @@ export default function WorkflowDialog({ open, onOpenChange, workflow, projectId
         name,
         description,
         category,
-        status,
+        status: status as any,
         version,
-        exposureLevel,
-        triggerType
+        exposureLevel: exposureLevel as any,
+        triggerType: triggerType as any
       });
     } else {
       // 创建新 Workflow
@@ -123,10 +123,10 @@ export default function WorkflowDialog({ open, onOpenChange, workflow, projectId
         projectId,
         description,
         category,
-        status,
+        status: status as any,
         version,
-        exposureLevel,
-        triggerType
+        exposureLevel: exposureLevel as any,
+        triggerType: triggerType as any
       });
     }
   };

@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { router, withPermission } from "../trpc";
+import { router, withPermission, protectedProcedure } from "../trpc";
 
 export const qaPairRouter = router({
   list: withPermission("knowledge", "read")
     .input(z.object({
-      projectId: z.string(), difficulty: z.string().optional(), materialType: z.string().optional(),
+      projectId: z.string(), difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'PROFESSIONAL']).optional(), materialType: z.string().optional(),
       status: z.string().optional(), search: z.string().optional(),
       page: z.number().default(1), pageSize: z.number().default(20),
     }))
@@ -27,7 +27,7 @@ export const qaPairRouter = router({
   create: withPermission("knowledge", "write")
     .input(z.object({
       question: z.string(), answer: z.string(), projectId: z.string(), rawId: z.string().optional(),
-      tags: z.array(z.string()), difficulty: z.string(), scenarios: z.array(z.string()),
+      tags: z.array(z.string()), difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'PROFESSIONAL']), scenarios: z.array(z.string()),
       questionKeywords: z.array(z.string()), materialType: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -41,7 +41,7 @@ export const qaPairRouter = router({
       question: z.string().optional(),
       answer: z.string().optional(),
       tags: z.array(z.string()).optional(),
-      difficulty: z.string().optional(),
+      difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'PROFESSIONAL']).optional(),
       scenarios: z.array(z.string()).optional(),
       questionKeywords: z.array(z.string()).optional(),
       materialType: z.string().optional(),
@@ -51,9 +51,9 @@ export const qaPairRouter = router({
       const { id, ...updateData } = input;
       const qa = await ctx.prisma.qAPair.update({
         where: { id },
-        data: updateData,
+        data: updateData as any,
       });
-      await ctx.prisma.auditLog.create({ data: { userId: ctx.user.id, action: "update", entityType: "qa_pair", entityId: qa.id, entityName: qa.question.substring(0, 50) } });
+      await ctx.prisma.auditLog.create({ data: { userId: ctx.session.user.id, action: "update", entityType: "qa_pair", entityId: qa.id, entityName: qa.question.substring(0, 50) } });
       return qa;
     }),
   delete: withPermission("knowledge", "write")
@@ -69,7 +69,7 @@ export const qaPairRouter = router({
         where: { id: input.id },
       });
 
-      await ctx.prisma.auditLog.create({ data: { userId: ctx.user.id, action: "delete", entityType: "qa_pair", entityId: qa.id, entityName: qa.question.substring(0, 50) } });
+      await ctx.prisma.auditLog.create({ data: { userId: ctx.session.user.id, action: "delete", entityType: "qa_pair", entityId: qa.id, entityName: qa.question.substring(0, 50) } });
       return deletedQa;
     }),
   // RAG 检索测试 (KC-04 / KC-07)
@@ -82,5 +82,33 @@ export const qaPairRouter = router({
         where: { projectId: input.projectId, question: { contains: input.question, mode: "insensitive" } },
         take: input.topN, orderBy: { qualityScore: "desc" },
       });
+    }),
+
+  search: protectedProcedure
+    .input(z.object({
+      query: z.string(),
+      projectId: z.string(),
+      limit: z.number().default(10),
+      difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'PROFESSIONAL']).optional(),
+    }))
+    .query(async ({ input, ctx }) => {
+      const items = await ctx.prisma.qAPair.findMany({
+        where: {
+          projectId: input.projectId,
+          status: 'ACTIVE',
+          ...(input.difficulty ? { difficulty: input.difficulty } : {}),
+          OR: [
+            { question: { contains: input.query, mode: 'insensitive' } },
+            { answer: { contains: input.query, mode: 'insensitive' } },
+            { questionKeywords: { hasSome: [input.query] } },
+          ],
+        },
+        orderBy: [
+          { qualityScore: 'desc' },
+          { updatedAt: 'desc' },
+        ],
+        take: input.limit,
+      });
+      return { items };
     }),
 });

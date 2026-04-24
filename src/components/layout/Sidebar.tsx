@@ -32,6 +32,7 @@ const NAV_SECTIONS = [
       { label: "Agent 列表", href: "/orchestration/agents" },
       { label: "Workflow 模板", href: "/orchestration/workflows" },
       { label: "运行记录", href: "/orchestration/runs" },
+      { label: "多角色元编排", href: "/orchestration/multi-agent" },
       { label: "HITL 审核队列", href: "/orchestration/review" },
     ],
   },

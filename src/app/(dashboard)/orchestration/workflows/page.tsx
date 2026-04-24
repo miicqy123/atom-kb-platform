@@ -19,7 +19,7 @@ const MODES = [
 
 export default function WorkflowsPage() {
   const { toast } = useToast();
-  const { currentProject } = useProjectStore();
+  const { projectId } = useProjectStore();
   const [activeMode, setActiveMode] = useState("DAG");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<any>(null);
@@ -28,8 +28,8 @@ export default function WorkflowsPage() {
 
   // 获取工作流列表
   const { data: workflows, isLoading, refetch } = trpc.workflow.getAll.useQuery(
-    { projectId: currentProject?.id ?? "" },
-    { enabled: !!currentProject }
+    { projectId: projectId ?? "" },
+    { enabled: !!projectId }
   );
 
   const deleteWorkflow = trpc.workflow.delete.useMutation({
@@ -182,7 +182,7 @@ export default function WorkflowsPage() {
       <WorkflowDialog
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
-        projectId={currentProject?.id ?? ""}
+        projectId={projectId ?? ""}
         onComplete={() => {
           setShowCreateDialog(false);
         }}
@@ -192,7 +192,7 @@ export default function WorkflowsPage() {
         open={!!editingWorkflow}
         onOpenChange={() => setEditingWorkflow(null)}
         workflow={editingWorkflow}
-        projectId={currentProject?.id ?? ""}
+        projectId={projectId ?? ""}
         onComplete={() => {
           setEditingWorkflow(null);
         }}

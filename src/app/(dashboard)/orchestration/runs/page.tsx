@@ -12,17 +12,18 @@ import { formatPercent } from "@/lib/utils";
 import { Activity, CheckCircle, Clock, Coins, Zap, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/hooks/use-toast";
+import Link from "next/link";
 
 export default function RunsPage() {
   const { toast } = useToast();
-  const { currentProject } = useProjectStore();
+  const { projectId } = useProjectStore();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
 
   const utils = trpc.useUtils();
 
-  const stats = trpc.workflowRun.todayStats.useQuery({ projectId: currentProject?.id ?? "" }, { enabled: !!currentProject });
-  const { data, isLoading } = trpc.workflowRun.list.useQuery({ projectId: currentProject?.id ?? "", page, status: statusFilter || undefined }, { enabled: !!currentProject });
+  const stats = trpc.workflowRun.todayStats.useQuery({ projectId: projectId ?? "" }, { enabled: !!projectId });
+  const { data, isLoading } = trpc.workflowRun.list.useQuery({ projectId: projectId ?? "", page, status: statusFilter || undefined }, { enabled: !!projectId });
 
   const deleteRun = trpc.workflowRun.delete.useMutation({
     onSuccess: () => {
@@ -72,11 +73,11 @@ export default function RunsPage() {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => {
-              // 查看详情
-            }}
+            asChild
           >
-            <Edit className="h-3 w-3" />
+            <Link href={`/orchestration/runs/${r.id}`}>
+              <Edit className="h-3 w-3" />
+            </Link>
           </Button>
           <Button
             size="sm"

@@ -7,7 +7,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 const prisma = new PrismaClient();
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  adapter: PrismaAdapter(prisma) as any,
   secret: process.env.AUTH_SECRET,
   session: {
     strategy: "jwt",
@@ -26,20 +26,37 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
+          console.log('[AUTH] Missing credentials');
           return null;
         }
 
+        const email = credentials.email.trim().toLowerCase();
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+          where: { email },
         });
 
-        if (!user || !user.passwordHash) {
+        if (!user) {
+          console.log('[AUTH] User not found:', email);
+          return null;
+        }
+
+        // 检查用户状态
+        const userStatus = String(user.status || '').toLowerCase();
+        if (userStatus !== 'active') {
+          console.log('[AUTH] User inactive:', email, user.status);
+          return null;
+        }
+
+        if (!user.passwordHash) {
+          console.log('[AUTH] No password hash for user:', email);
           return null;
         }
 
         const isValidPassword = await bcrypt.compare(credentials.password, user.passwordHash);
 
         if (!isValidPassword) {
+          console.log('[AUTH] Password mismatch:', email);
           return null;
         }
 
@@ -69,7 +86,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.email = token.email as string;
         session.user.name = token.name as string;
-        session.user.role = token.role as string;
+        session.user.role = token.role as any;
         session.user.tenantId = token.tenantId as string;
       }
       return session;

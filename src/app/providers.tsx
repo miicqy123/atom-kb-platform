@@ -14,7 +14,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
         loggerLink(),
         httpBatchLink({
           url: "/api/trpc",
-          transformer: superjson,
           headers() {
             return {
               "x-trpc-source": "nextjs-react",

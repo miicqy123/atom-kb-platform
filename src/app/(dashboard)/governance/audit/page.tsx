@@ -16,7 +16,7 @@ const RESOURCE_TYPES = ["ALL", "USER", "PROJECT", "WORKFLOW", "BLUEPRINT", "CONF
 const STATUS_OPTIONS = ["ALL", "SUCCESS", "FAILURE"];
 
 export default function AuditLogPage() {
-  const { currentProject } = useProjectStore();
+  const { projectId } = useProjectStore();
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [actionFilter, setActionFilter] = useState("ALL");

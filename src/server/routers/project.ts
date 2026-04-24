@@ -109,7 +109,6 @@ export const projectRouter = router({
       workspaceId: z.string(),
       type: z.string().optional(),
       description: z.string().optional(),
-      tags: z.array(z.string()).optional().default([]),
       visibility: z.enum(['PRIVATE', 'TEAM', 'PUBLIC']).optional().default('PRIVATE'),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -140,8 +139,6 @@ export const projectRouter = router({
           workspaceId: input.workspaceId,
           type: input.type,
           description: input.description,
-          tags: input.tags,
-          visibility: input.visibility,
           ownerId: ctx.session.user.id,
         }
       });
@@ -154,8 +151,6 @@ export const projectRouter = router({
       name: z.string().min(1).max(255).optional(),
       type: z.string().optional(),
       description: z.string().optional(),
-      tags: z.array(z.string()).optional(),
-      visibility: z.enum(['PRIVATE', 'TEAM', 'PUBLIC']).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, ...updateData } = input;

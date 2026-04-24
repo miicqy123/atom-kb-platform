@@ -42,17 +42,18 @@ export default function EvaluationPage() {
   });
 
   // 计算统计值
-  const totalRecords = stats?.reduce((sum, item) => sum + item._count, 0) || 0;
-  const avgS8 = stats?.find(item => item.status)?.["_avg"]?.s8_score || 0;
-  const avgS9 = stats?.find(item => item.status)?.["_avg"]?.s9_score || 0;
+  const statsData = stats as any;
+  const totalRecords = statsData?._count?._all || statsData?.total || 0;
+  const avgS8 = statsData?._avg?.s9OverallScore || 0;
+  const avgS9 = statsData?.avgScore || 0;
 
   // 格式化趋势数据以适应图表
   const chartData = scoreTrend?.map((record, index) => ({
     run: `#${scoreTrend.length - index}`,
-    s8: record.s8_score,
-    s9: record.s9_score,
+    s8: typeof record.s8Scores === 'number' ? record.s8Scores : 0,
+    s9: record.s9OverallScore,
     date: new Date(record.createdAt).toLocaleDateString(),
-    workflowName: record.workflowRun?.name || `Run ${record.id}`
+    workflowName: `Run ${record.id}`
   })) || [];
 
   return (
@@ -123,10 +124,10 @@ export default function EvaluationPage() {
                 <tbody className="text-sm">
                   {scoreTrend?.map(record => (
                     <tr key={record.id} className="border-b border-gray-100">
-                      <td className="py-2">{record.workflowRun?.name || record.id}</td>
-                      <td className="py-2">{record.s8_score}</td>
-                      <td className="py-2">{record.s9_score}</td>
-                      <td className="py-2">{record.status}</td>
+                      <td className="py-2">{`Run ${record.workflowRun?.id?.slice(0, 8) ?? record.id}`}</td>
+                      <td className="py-2">{typeof record.s8Scores === 'number' ? record.s8Scores : JSON.stringify(record.s8Scores)}</td>
+                      <td className="py-2">{record.s9OverallScore}</td>
+                      <td className="py-2">{record.passed ? '通过' : '未通过'}</td>
                       <td className="py-2">{new Date(record.createdAt).toLocaleDateString()}</td>
                       <td className="py-2">
                         <div className="flex gap-1">

@@ -13,7 +13,7 @@ import QADialog from "@/components/knowledge/QADialog";
 import { useToast } from "@/hooks/use-toast";
 
 export default function QAPairsPage() {
-  const { currentProject } = useProjectStore();
+  const { projectId } = useProjectStore();
   const { toast } = useToast();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -28,13 +28,13 @@ export default function QAPairsPage() {
   const currentPage = page;
   const offset = (currentPage - 1) * pageSize;
 
-  const { data, isLoading } = trpc.qaPair.list.useQuery({
-    projectId: currentProject?.id ?? "",
+  const { data, isLoading } = trpc.qaPair.getAll.useQuery({
+    projectId: projectId ?? "",
     search: search || undefined,
-    page: currentPage,
-    pageSize: pageSize
+    offset: (currentPage - 1) * pageSize,
+    limit: pageSize
   }, {
-    enabled: !!currentProject
+    enabled: !!projectId
   });
 
   // 注意：暂时不启用检索测试功能，因为searchSimilar端点未在后端定义
@@ -46,7 +46,7 @@ export default function QAPairsPage() {
         title: "删除成功",
         description: "QA对已成功删除",
       });
-      utils.qaPair.list.invalidate(); // 使缓存失效
+      utils.qaPair.getAll.invalidate(); // 使缓存失效
     },
     onError: (error) => {
       toast({
@@ -84,7 +84,7 @@ export default function QAPairsPage() {
   ];
 
   // 计算总页数
-  const totalPages = data ? data.totalPages : 1;
+  const totalPages = data ? Math.ceil((data.totalCount ?? 0) / pageSize) : 1;
 
   return (
     <div>
@@ -118,14 +118,14 @@ export default function QAPairsPage() {
       <QADialog
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
-        projectId={currentProject?.id ?? ""}
+        projectId={projectId ?? ""}
         onComplete={() => setShowCreateDialog(false)}
       />
 
       <QADialog
         open={!!editingQAPair}
         onOpenChange={() => setEditingQAPair(null)}
-        projectId={currentProject?.id ?? ""}
+        projectId={projectId ?? ""}
         qaPair={editingQAPair}
         onComplete={() => setEditingQAPair(null)}
       />

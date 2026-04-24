@@ -1,6 +1,12 @@
 import { cn } from "@/lib/utils";
 
-export function StatsCard({ title, value, subtitle, icon, color = "text-brand" }: { title: string; value: string | number; subtitle?: string; icon?: React.ReactNode; color?: string }) {
+export function StatsCard({ title, value, subtitle, icon, color = "text-brand" }: {
+  title: string;
+  value: string | number | React.ReactNode;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  color?: string
+}) {
   return (
     <div className="rounded-xl border bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between">

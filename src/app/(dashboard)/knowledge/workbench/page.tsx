@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ChevronRight, Wand2, Tag, Layers, Database, CheckCircle2, AlertTriangle } from "lucide-react";
 import WorkbenchDialog from "@/components/knowledge/WorkbenchDialog";
+import { useToast } from '@/hooks/use-toast';
 
 type Station = { id: string; name: string; icon: React.ReactNode; status: "done" | "active" | "pending" };
 
@@ -13,8 +14,42 @@ export default function WorkbenchPage() {
   const [activeTrack, setActiveTrack] = useState<"A" | "B">("A");
   const [activeStation, setActiveStation] = useState(1);
   const [showProcessDialog, setShowProcessDialog] = useState(false);
+  const { toast } = useToast();
+  const [projectId, setProjectId] = useState('');
+  const [selectedRawId, setSelectedRawId] = useState('');
 
-  const { data: currentProject } = trpc.project.getCurrent.useQuery(); // 假设有一个获取当前项目的方法
+  // 获取用户&项目
+  const { data: userData } = trpc.user.getCurrent.useQuery();
+  const { data: projectsData } = trpc.project.list.useQuery(
+    { workspaceId: userData?.workspaces?.[0]?.workspaceId || '' },
+    { enabled: !!userData }
+  );
+  const currentProject = projectsData?.items?.[0];
+
+  // 获取已转换的素材列表（可生成 QA 的）
+  const { data: rawData } = trpc.raw.getAll.useQuery(
+    { projectId, limit: 100 },
+    { enabled: !!projectId }
+  );
+  const convertedRaws = rawData?.items?.filter(r => r.conversionStatus === 'CONVERTED') || [];
+
+  // Track A：生产线触发
+  const trackAMutation = trpc.pipeline.processRaw.useMutation({
+    onSuccess: (d) => toast({ title: `Track A 完成，生成 ${d.atomsCreated} 个原子块` }),
+    onError: (e) => toast({ title: 'Track A 失败', description: e.message, variant: 'destructive' }),
+  });
+
+  // Track B：QA 生成触发
+  const trackBMutation = trpc.pipeline.generateQA.useMutation({
+    onSuccess: (d) => toast({ title: `Track B 完成，生成 ${d.qaPairsCreated} 组 QA 对` }),
+    onError: (e) => toast({ title: 'Track B 失败', description: e.message, variant: 'destructive' }),
+  });
+
+  // 批量向量化
+  const vectorMutation = trpc.vector.indexProject.useMutation({
+    onSuccess: (d) => toast({ title: `向量化完成，索引 ${d.indexed} 个原子块` }),
+    onError: (e) => toast({ title: '向量化失败', description: e.message, variant: 'destructive' }),
+  });
 
   const trackAStations: Station[] = [
     { id: "1", name: "格式归一", icon: <CheckCircle2 className="h-4 w-4" />, status: "done" },
@@ -99,6 +134,85 @@ export default function WorkbenchPage() {
           onComplete={() => setShowProcessDialog(false)}
         />
       )}
+
+      {/* ── 生产线控制台 ── */}
+      <div className="grid grid-cols-1 gap-6 mt-6">
+        {/* 项目选择 */}
+        <div className="border rounded-xl p-5 bg-white">
+          <h3 className="font-semibold mb-3">① 选择项目</h3>
+          <select
+            value={projectId}
+            onChange={e => setProjectId(e.target.value)}
+            className="border rounded-lg px-3 py-2 w-full text-sm"
+          >
+            <option value="">请选择项目</option>
+            {projectsData?.items?.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Track A：原子化生产线 */}
+        <div className="border rounded-xl p-5 bg-white">
+          <h3 className="font-semibold mb-1">② Track A — 原子化生产线</h3>
+          <p className="text-xs text-gray-500 mb-3">选择素材 → 格式归一 → 切块 → 自动打标 → 入库</p>
+          <select
+            value={selectedRawId}
+            onChange={e => setSelectedRawId(e.target.value)}
+            className="border rounded-lg px-3 py-2 w-full text-sm mb-3"
+          >
+            <option value="">选择已上传素材</option>
+            {rawData?.items?.map(r => (
+              <option key={r.id} value={r.id}>
+                [{r.conversionStatus}] {r.title}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => trackAMutation.mutate({ rawId: selectedRawId, projectId })}
+            disabled={!selectedRawId || !projectId || trackAMutation.isPending}
+            className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-40"
+          >
+            {trackAMutation.isPending ? '处理中…' : '▶ 启动 Track A（原子化）'}
+          </button>
+        </div>
+
+        {/* Track B：QA 对生成 */}
+        <div className="border rounded-xl p-5 bg-white">
+          <h3 className="font-semibold mb-1">③ Track B — QA 对生产线</h3>
+          <p className="text-xs text-gray-500 mb-3">仅已完成 Track A 的素材可生成 QA 对</p>
+          <select
+            className="border rounded-lg px-3 py-2 w-full text-sm mb-3"
+            onChange={e => setSelectedRawId(e.target.value)}
+            value={selectedRawId}
+          >
+            <option value="">选择已转换素材</option>
+            {convertedRaws.map(r => (
+              <option key={r.id} value={r.id}>{r.title}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => trackBMutation.mutate({ rawId: selectedRawId, projectId })}
+            disabled={!selectedRawId || !projectId || trackBMutation.isPending}
+            className="w-full py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
+          >
+            {trackBMutation.isPending ? '生成中…' : '▶ 启动 Track B（QA 对生成）'}
+          </button>
+        </div>
+
+        {/* 向量化 */}
+        <div className="border rounded-xl p-5 bg-white">
+          <h3 className="font-semibold mb-1">④ 向量化索引</h3>
+          <p className="text-xs text-gray-500 mb-3">将项目所有 active 原子块写入 Qdrant 向量库</p>
+          <button
+            onClick={() => vectorMutation.mutate({ projectId })}
+            disabled={!projectId || vectorMutation.isPending}
+            className="w-full py-2 bg-orange-500 text-white rounded-lg text-sm hover:bg-orange-600 disabled:opacity-40"
+          >
+            {vectorMutation.isPending ? '索引中…' : '▶ 批量向量化'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -62,3 +62,12 @@ export function withPermission(module: Module, required: Permission) {
     return next({ ctx });
   });
 }
+
+// Granular permission middleware
+export const permissionProcedure = (permission: string) =>
+  protectedProcedure.use(async ({ ctx, next }) => {
+    const { requirePermission } = await import('@/lib/rbac');
+    const userRole = ctx.session?.user?.role || 'READONLY';
+    requirePermission(userRole, permission);
+    return next({ ctx });
+  });

@@ -16,7 +16,7 @@ import AtomDialog from "@/components/knowledge/AtomDialog";
 import { useToast } from "@/hooks/use-toast";
 
 export default function AtomsPage() {
-  const { currentProject } = useProjectStore();
+  const { projectId } = useProjectStore();
   const { toast } = useToast();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -25,6 +25,7 @@ export default function AtomsPage() {
   const [view, setView] = useState<"table" | "card" | "kanban">("table");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingAtom, setEditingAtom] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const utils = trpc.useUtils();
 
@@ -32,14 +33,33 @@ export default function AtomsPage() {
   const offset = (page - 1) * limit;
 
   const { data, isLoading } = trpc.atom.getAll.useQuery({
-    projectId: currentProject?.id ?? "",
+    projectId: projectId ?? "",
     search: search || undefined,
     layer: (layerFilter || undefined) as "A" | "B" | "C" | "D" | undefined,
     status: (statusFilter || undefined) as "DRAFT" | "TESTING" | "ACTIVE" | "ARCHIVED" | undefined,
     limit,
     offset
   }, {
-    enabled: !!currentProject
+    enabled: !!projectId
+  });
+
+  // 批量激活 mutation
+  const activateMutation = trpc.atom.batchActivate.useMutation({
+    onSuccess: (d) => {
+      toast({ title: `已激活 ${d.count} 个原子块` });
+      setSelectedIds([]);
+      utils.atom.getAll.invalidate();
+    },
+    onError: (e) => toast({ title: '激活失败', description: e.message, variant: 'destructive' }),
+  });
+
+  // 批量归档 mutation
+  const archiveMutation = trpc.atom.batchArchive.useMutation({
+    onSuccess: (d) => {
+      toast({ title: `已归档 ${d.count} 个原子块` });
+      setSelectedIds([]);
+      utils.atom.getAll.invalidate();
+    },
   });
 
   const deleteMutation = trpc.atom.delete.useMutation({
@@ -60,6 +80,34 @@ export default function AtomsPage() {
   });
 
   const columns: Column<any>[] = [
+    {
+      key: "checkbox",
+      label: <input
+        type="checkbox"
+        checked={data?.items?.length > 0 && selectedIds.length === data.items.filter((a: any) => a.status === 'DRAFT').length}
+        onChange={e => {
+          if (e.target.checked) {
+            // Select all draft items
+            const draftIds = data?.items?.filter((a: any) => a.status === 'DRAFT').map((a: any) => a.id) || [];
+            setSelectedIds(draftIds);
+          } else {
+            setSelectedIds([]);
+          }
+        }}
+        className="w-4 h-4 rounded"
+      />,
+      render: (r: any) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.includes(r.id)}
+          onChange={e => {
+            if (e.target.checked) setSelectedIds(prev => [...prev, r.id]);
+            else setSelectedIds(prev => prev.filter(id => id !== r.id));
+          }}
+          className="w-4 h-4 rounded"
+        />
+      )
+    },
     { key: "title", label: "原子块名称", render: (r) => <span className="font-medium">{r.title}</span> },
     { key: "layer", label: "层级", render: (r) => <LayerBadge layer={r.layer} /> },
     { key: "granularity", label: "粒度", render: (r) => <GranularityBadge g={r.granularity} /> },
@@ -84,6 +132,16 @@ export default function AtomsPage() {
         >
           <Trash2 className="h-4 w-4 text-red-500" />
         </Button>
+        {/* 单条快捷激活 */}
+        {r.status === 'DRAFT' && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => activateMutation.mutate({ ids: [r.id], projectId: projectId ?? "" })}
+          >
+            激活
+          </Button>
+        )}
       </div>
     )},
   ];
@@ -142,62 +200,95 @@ export default function AtomsPage() {
         </div>
       </div>
 
-      {view === "table" && <DataTable columns={columns} data={data?.items ?? []} loading={isLoading} />}
-
-      {view === "card" && (
-        <div className="grid grid-cols-3 gap-4">
-          {(data?.items ?? []).map((atom: any) => (
-            <div key={atom.id} className="rounded-xl border bg-white p-4 hover:shadow-md transition-shadow cursor-pointer">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium text-sm">{atom.title}</h3>
-                <StatusBadge status={atom.status} />
-              </div>
-              <p className="text-xs text-gray-500 line-clamp-2 mb-3">{atom.content}</p>
-              <div className="flex flex-wrap gap-1 mb-2">
-                <LayerBadge layer={atom.layer} />
-                <GranularityBadge g={atom.granularity} />
-              </div>
-              <div className="flex items-center justify-between text-xs text-gray-400">
-                <span>{new Date(atom.createdAt).toLocaleDateString()}</span>
-                <span>v{atom.version}</span>
-              </div>
-              <div className="mt-2 flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setEditingAtom(atom)}>
-                  <Edit className="h-3 w-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    if (window.confirm("确定要删除这个原子块吗？此操作不可撤销。")) {
-                      deleteMutation.mutate({ id: atom.id });
-                    }
-                  }}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="h-3 w-3 text-red-500" />
-                </Button>
-              </div>
+      {view === "table" && (
+        <>
+          {/* ── 批量操作栏 ── */}
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl mb-4">
+              <span className="text-sm text-blue-700 font-medium">已选 {selectedIds.length} 项</span>
+              <button
+                onClick={() => activateMutation.mutate({ ids: selectedIds, projectId: projectId ?? "" })}
+                disabled={activateMutation.isPending}
+                className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-40"
+              >
+                ✓ 批量激活（ACTIVE）
+              </button>
+              <button
+                onClick={() => archiveMutation.mutate({ ids: selectedIds })}
+                disabled={archiveMutation.isPending}
+                className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded-lg hover:bg-gray-600 disabled:opacity-40"
+              >
+                归档
+              </button>
+              <button
+                onClick={() => setSelectedIds([])}
+                className="text-xs text-gray-400 hover:text-gray-600 ml-auto"
+              >
+                取消选择
+              </button>
             </div>
-          ))}
-        </div>
+          )}
+          <DataTable columns={columns} data={data?.items ?? []} loading={isLoading} />
+        </>
       )}
 
-      {view === "kanban" && (
-        <div className="grid grid-cols-4 gap-4">
-          {["ACTIVE","DRAFT","TESTING","ARCHIVED"].map(status => (
-            <div key={status} className="rounded-xl bg-gray-50 p-3">
-              <h3 className="text-xs font-semibold mb-2">
-                <StatusBadge status={status} />
-              </h3>
-              <div className="space-y-2">
-                {(data?.items ?? []).filter((a: any) => a.status === status).map((atom: any) => (
-                  <div key={atom.id} className="rounded-lg border bg-white p-3 text-sm">
-                    <p className="font-medium text-xs">{atom.title}</p>
-                    <div className="mt-1">
-                      <LayerBadge layer={atom.layer} />
+      {view === "card" && (
+        <>
+          {/* ── 批量操作栏 ── */}
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl mb-4">
+              <span className="text-sm text-blue-700 font-medium">已选 {selectedIds.length} 项</span>
+              <button
+                onClick={() => activateMutation.mutate({ ids: selectedIds, projectId: projectId ?? "" })}
+                disabled={activateMutation.isPending}
+                className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-40"
+              >
+                ✓ 批量激活（ACTIVE）
+              </button>
+              <button
+                onClick={() => archiveMutation.mutate({ ids: selectedIds })}
+                disabled={archiveMutation.isPending}
+                className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded-lg hover:bg-gray-600 disabled:opacity-40"
+              >
+                归档
+              </button>
+              <button
+                onClick={() => setSelectedIds([])}
+                className="text-xs text-gray-400 hover:text-gray-600 ml-auto"
+              >
+                取消选择
+              </button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-4">
+            {(data?.items ?? []).map((atom: any) => (
+              <div key={atom.id} className="rounded-xl border bg-white p-4 hover:shadow-md transition-shadow cursor-pointer">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(atom.id)}
+                    onChange={e => {
+                      if (e.target.checked) setSelectedIds(prev => [...prev, atom.id]);
+                      else setSelectedIds(prev => prev.filter(id => id !== atom.id));
+                    }}
+                    className="mt-1 w-4 h-4 rounded"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium text-sm">{atom.title}</h3>
+                      <StatusBadge status={atom.status} />
                     </div>
-                    <div className="mt-2 flex justify-end gap-1">
+                    <p className="text-xs text-gray-500 line-clamp-2 mb-3">{atom.content}</p>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      <LayerBadge layer={atom.layer} />
+                      <GranularityBadge g={atom.granularity} />
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-400">
+                      <span>{new Date(atom.createdAt).toLocaleDateString()}</span>
+                      <span>v{atom.version}</span>
+                    </div>
+                    <div className="mt-2 flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setEditingAtom(atom)}>
                         <Edit className="h-3 w-3" />
                       </Button>
@@ -214,12 +305,118 @@ export default function AtomsPage() {
                         <Trash2 className="h-3 w-3 text-red-500" />
                       </Button>
                     </div>
+                    {/* 单条快捷激活 */}
+                    {atom.status === 'DRAFT' && (
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          onClick={() => activateMutation.mutate({ ids: [atom.id], projectId: projectId ?? "" })}
+                          className="text-xs bg-green-50 text-green-600 border border-green-200 px-2 py-1 rounded hover:bg-green-100"
+                        >
+                          激活
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ))}
+                </div>
               </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {view === "kanban" && (
+        <>
+          {/* ── 批量操作栏 ── */}
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl mb-4">
+              <span className="text-sm text-blue-700 font-medium">已选 {selectedIds.length} 项</span>
+              <button
+                onClick={() => activateMutation.mutate({ ids: selectedIds, projectId: projectId ?? "" })}
+                disabled={activateMutation.isPending}
+                className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 disabled:opacity-40"
+              >
+                ✓ 批量激活（ACTIVE）
+              </button>
+              <button
+                onClick={() => archiveMutation.mutate({ ids: selectedIds })}
+                disabled={archiveMutation.isPending}
+                className="px-3 py-1.5 bg-gray-500 text-white text-xs rounded-lg hover:bg-gray-600 disabled:opacity-40"
+              >
+                归档
+              </button>
+              <button
+                onClick={() => setSelectedIds([])}
+                className="text-xs text-gray-400 hover:text-gray-600 ml-auto"
+              >
+                取消选择
+              </button>
             </div>
-          ))}
-        </div>
+          )}
+
+          <div className="grid grid-cols-4 gap-4">
+            {["ACTIVE","DRAFT","TESTING","ARCHIVED"].map(status => (
+              <div key={status} className="rounded-xl bg-gray-50 p-3">
+                <h3 className="text-xs font-semibold mb-2">
+                  <StatusBadge status={status} />
+                </h3>
+                <div className="space-y-2">
+                  {(data?.items ?? []).filter((a: any) => a.status === status).map((atom: any) => (
+                    <div key={atom.id} className="rounded-lg border bg-white p-3 text-sm">
+                      <div className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(atom.id)}
+                          onChange={e => {
+                            if (e.target.checked) setSelectedIds(prev => [...prev, atom.id]);
+                            else setSelectedIds(prev => prev.filter(id => id !== atom.id));
+                          }}
+                          className="mt-0.5 w-4 h-4 rounded"
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium text-xs">{atom.title}</p>
+                          <div className="mt-1">
+                            <LayerBadge layer={atom.layer} />
+                          </div>
+                          <div className="mt-2 flex justify-between">
+                            <span className="text-xs">{new Date(atom.createdAt).toLocaleDateString()}</span>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => setEditingAtom(atom)}>
+                                <Edit className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  if (window.confirm("确定要删除这个原子块吗？此操作不可撤销。")) {
+                                    deleteMutation.mutate({ id: atom.id });
+                                  }
+                                }}
+                                disabled={deleteMutation.isPending}
+                              >
+                                <Trash2 className="h-3 w-3 text-red-500" />
+                              </Button>
+                            </div>
+                          </div>
+                          {/* 单条快捷激活 */}
+                          {atom.status === 'DRAFT' && (
+                            <div className="mt-1">
+                              <button
+                                onClick={() => activateMutation.mutate({ ids: [atom.id], projectId: projectId ?? "" })}
+                                className="text-xs bg-green-50 text-green-600 border border-green-200 px-2 py-1 rounded hover:bg-green-100"
+                              >
+                                激活
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {data && <Pagination page={page} totalPages={totalPages} onChange={setPage} />}
@@ -227,14 +424,14 @@ export default function AtomsPage() {
       <AtomDialog
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
-        projectId={currentProject?.id ?? ""}
+        projectId={projectId ?? ""}
         onComplete={() => setShowCreateDialog(false)}
       />
 
       <AtomDialog
         open={!!editingAtom}
         onOpenChange={() => setEditingAtom(null)}
-        projectId={currentProject?.id ?? ""}
+        projectId={projectId ?? ""}
         atom={editingAtom}
         onComplete={() => setEditingAtom(null)}
       />

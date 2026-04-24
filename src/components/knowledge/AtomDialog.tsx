@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { trpc } from '@/lib/trpc';
 import { useToast } from '@/hooks/use-toast';
+import { AtomTagEditor } from './AtomTagEditor';
 
 interface AtomDialogProps {
   open: boolean;
@@ -27,6 +28,13 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
 
   const utils = trpc.useUtils();
   const { toast } = useToast();
+
+  // 版本历史相关逻辑
+  const { data: versionHistory } = trpc.atom.getVersionHistory.useQuery({ atomId: atom?.id }, { enabled: !!atom?.id });
+  const createVersionMutation = trpc.atom.createVersion.useMutation({
+    onSuccess: (d) => toast({ title: `版本 ${d.snapshotVersion} 快照已保存` }),
+    onError: (error) => toast({ title: '存档失败', description: error.message, variant: 'destructive' }),
+  });
 
   const createAtomMutation = trpc.atom.create.useMutation({
     onSuccess: () => {
@@ -143,6 +151,12 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
         exposureLevel,
         status
       });
+    }
+  };
+
+  const handleCreateVersion = () => {
+    if (atom?.id) {
+      createVersionMutation.mutate({ id: atom.id, reason: '手动存档' });
     }
   };
 
@@ -269,6 +283,54 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
               <option value="STRICTLY_FORBIDDEN">严格禁止</option>
             </select>
           </div>
+
+          {/* 手动标注修正面板 - 仅在编辑模式下显示 */}
+          {isEditing && (
+            <div className="mt-4 border rounded-lg p-4 bg-white">
+              <AtomTagEditor
+                atomId={atom.id}
+                currentLayer={atom.layer}
+                currentSlots={atom.slotMappings || []}
+                currentDimensions={atom.dimensions || []}
+                currentGranularity={atom.granularity}
+                onSaved={() => {
+                  // 刷新页面数据
+                  utils.atom.getAll.invalidate();
+                }}
+              />
+            </div>
+          )}
+
+          {/* 版本历史面板 - 仅在编辑模式下显示 */}
+          {isEditing && (
+            <div className="mt-6 border-t pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold text-gray-500">版本历史</h4>
+                <button
+                  onClick={handleCreateVersion}
+                  disabled={createVersionMutation.isPending}
+                  className="text-xs bg-gray-100 px-2 py-1 rounded hover:bg-gray-200 disabled:opacity-40"
+                >
+                  + 存档当前版本
+                </button>
+              </div>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {versionHistory?.map(v => (
+                  <div key={v.id} className="text-xs border rounded p-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono bg-gray-100 px-1.5 rounded">v{v.version}</span>
+                      <span className="text-gray-400">{new Date(v.createdAt).toLocaleDateString('zh-CN')}</span>
+                      <span className="text-gray-500 truncate">{v.reason}</span>
+                    </div>
+                    <p className="text-gray-400 line-clamp-2">{v.content?.slice(0, 100)}</p>
+                  </div>
+                ))}
+                {versionHistory && versionHistory.length === 0 && (
+                  <p className="text-xs text-gray-400 italic">暂无版本历史</p>
+                )}
+              </div>
+            </div>
+          )}
 
           <DialogFooter>
             <Button

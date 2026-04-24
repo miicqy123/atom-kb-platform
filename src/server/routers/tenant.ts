@@ -55,8 +55,7 @@ export const tenantRouter = router({
     .input(z.object({
       name: z.string().min(1, "租户名称不能为空"),
       domain: z.string().min(1, "域名不能为空"),
-      plan: z.enum(['TRIAL', 'STARTER', 'PROFESSIONAL', 'ENTERPRISE']),
-      status: z.enum(['ACTIVE', 'SUSPENDED', 'TRIAL']).default('TRIAL'),
+      status: z.enum(['active', 'suspended', 'trial']).default('active'),
     }))
     .mutation(async ({ ctx, input }) => {
       // 检查用户是否为平台管理员
@@ -69,11 +68,11 @@ export const tenantRouter = router({
       }
 
       // 检查域名是否已存在
-      const existingDomain = await ctx.prisma.tenant.findFirst({
-        where: { domain: input.domain }
+      const existingTenant = await ctx.prisma.tenant.findFirst({
+        where: { name: input.domain as any }
       });
 
-      if (existingDomain) {
+      if (existingTenant) {
         throw new Error('域名已存在');
       }
 
@@ -81,10 +80,7 @@ export const tenantRouter = router({
       const tenant = await ctx.prisma.tenant.create({
         data: {
           name: input.name,
-          domain: input.domain,
-          plan: input.plan,
           status: input.status,
-          createdBy: ctx.session.user.id,
         }
       });
 
@@ -106,8 +102,7 @@ export const tenantRouter = router({
       id: z.string(),
       name: z.string().optional(),
       domain: z.string().optional(),
-      plan: z.enum(['TRIAL', 'STARTER', 'PROFESSIONAL', 'ENTERPRISE']).optional(),
-      status: z.enum(['ACTIVE', 'SUSPENDED', 'TRIAL']).optional(),
+      status: z.enum(['active', 'suspended', 'trial']).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, ...updateData } = input;
@@ -125,7 +120,7 @@ export const tenantRouter = router({
       if (input.domain) {
         const existingDomain = await ctx.prisma.tenant.findFirst({
           where: {
-            domain: input.domain,
+            name: input.domain,
             id: { not: input.id } // 排除当前租户
           }
         });

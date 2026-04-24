@@ -6,20 +6,15 @@ export const qaRouter = router({
   getAll: protectedProcedure
     .input(z.object({
       projectId: z.string(),
-      categoryId: z.string().optional(), // 分类ID过滤
       status: z.enum(['DRAFT', 'REVIEW', 'APPROVED', 'ARCHIVED']).optional(), // 状态过滤
       search: z.string().optional(), // 搜索关键词
       limit: z.number().optional().default(10),
       offset: z.number().optional().default(0),
     }))
     .query(async ({ ctx, input }) => {
-      const { projectId, categoryId, status, search, limit, offset } = input;
+      const { projectId, status, search, limit, offset } = input;
 
       const whereClause: any = { projectId };
-
-      if (categoryId) {
-        whereClause.categoryId = categoryId;
-      }
 
       if (status) {
         whereClause.status = status;
@@ -37,9 +32,6 @@ export const qaRouter = router({
         take: limit,
         skip: offset,
         orderBy: { createdAt: 'desc' },
-        include: {
-          category: true, // 包含分类信息
-        },
       });
 
       const totalCount = await ctx.prisma.qAPair.count({
@@ -61,9 +53,6 @@ export const qaRouter = router({
     .query(async ({ ctx, input }) => {
       return ctx.prisma.qAPair.findUnique({
         where: { id: input.id },
-        include: {
-          category: true,
-        },
       });
     }),
 
@@ -73,12 +62,8 @@ export const qaRouter = router({
       question: z.string().min(1),
       answer: z.string().min(1),
       projectId: z.string(),
-      categoryId: z.string().optional(),
       tags: z.array(z.string()).optional().default([]),
       status: z.enum(['DRAFT', 'REVIEW', 'APPROVED', 'ARCHIVED']).optional().default('DRAFT'),
-      priority: z.number().optional().default(0),
-      source: z.string().optional(), // 来源说明
-      exposureLevel: z.enum(['INTERNAL', 'EXTERNAL', 'NEEDS_APPROVAL', 'STRICTLY_FORBIDDEN']).optional().default('INTERNAL'),
     }))
     .mutation(async ({ ctx, input }) => {
       // 检查用户是否有权限在该项目中创建问答对
@@ -90,30 +75,14 @@ export const qaRouter = router({
         throw new Error('Project not found');
       }
 
-      // 如果指定了分类，检查分类是否属于同一项目
-      if (input.categoryId) {
-        const category = await ctx.prisma.category.findUnique({
-          where: { id: input.categoryId },
-        });
-
-        if (!category || category.projectId !== input.projectId) {
-          throw new Error('Category not found in the same project');
-        }
-      }
-
       return ctx.prisma.qAPair.create({
         data: {
           question: input.question,
           answer: input.answer,
           projectId: input.projectId,
-          categoryId: input.categoryId,
           tags: input.tags,
-          status: input.status,
-          priority: input.priority,
-          source: input.source,
-          exposureLevel: input.exposureLevel,
-          createdBy: ctx.session.user.id,
-        },
+          status: input.status as any,
+        } as any,
       });
     }),
 
@@ -123,12 +92,8 @@ export const qaRouter = router({
       id: z.string(),
       question: z.string().min(1).optional(),
       answer: z.string().min(1).optional(),
-      categoryId: z.string().optional(),
       tags: z.array(z.string()).optional(),
       status: z.enum(['DRAFT', 'REVIEW', 'APPROVED', 'ARCHIVED']).optional(),
-      priority: z.number().optional(),
-      source: z.string().optional(),
-      exposureLevel: z.enum(['INTERNAL', 'EXTERNAL', 'NEEDS_APPROVAL', 'STRICTLY_FORBIDDEN']).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, ...updateData } = input;
@@ -151,22 +116,9 @@ export const qaRouter = router({
         throw new Error('Project not found');
       }
 
-      // 如果有新的分类ID，检查它是否属于同一项目
-      if (updateData.categoryId !== undefined) {
-        if (updateData.categoryId) {
-          const category = await ctx.prisma.category.findUnique({
-            where: { id: updateData.categoryId },
-          });
-
-          if (!category || category.projectId !== qaPair.projectId) {
-            throw new Error('Category not found in the same project');
-          }
-        }
-      }
-
       return ctx.prisma.qAPair.update({
         where: { id },
-        data: updateData,
+        data: updateData as any,
       });
     }),
 
@@ -219,8 +171,8 @@ export const qaRouter = router({
       }
 
       // 确保所有问答对都在用户的项目中
-      const projectIds = [...new Set(qaPairs.map(qa => qa.projectId))];
-      for (const projectId of projectIds) {
+      const uniqueProjectIds = Array.from(new Set(qaPairs.map(qa => qa.projectId)));
+      for (const projectId of uniqueProjectIds) {
         const project = await ctx.prisma.project.findUnique({
           where: { id: projectId },
         });

@@ -7,14 +7,47 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { SlotTag } from "@/components/ui/SlotTag";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Settings, Eye, Package, ChevronDown, ChevronRight, Search, Check, X } from "lucide-react";
+import { useToast } from '@/hooks/use-toast';
 
 export default function BlueprintEditorPage() {
   const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
+  const [assembledResult, setAssembledResult] = useState<string>('');
+  const [isAssembling, setIsAssembling] = useState(false);
+
   const { data: bp } = trpc.blueprint.getById.useQuery({ id });
   const preview = trpc.blueprint.assemblePreview.useQuery({ blueprintId: id });
   const [expandedSlot, setExpandedSlot] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerSlot, setPickerSlot] = useState("");
+
+  // 获取当前蓝图 id（Next.js App Router params）
+  const blueprintId = id;
+
+  // 装配预览查询（初始不执行）
+  const { data: previewData, refetch: refetchPreview } = trpc.blueprint.preview.useQuery(
+    { blueprintId },
+    { enabled: false }
+  );
+
+  // 触发装配 mutation
+  const assembleMutation = trpc.blueprint.assemble.useMutation({
+    onSuccess: async (data) => {
+      setAssembledResult(data.assembled);
+      await refetchPreview();
+      toast({ title: '装配完成', description: `已生成完整系统提示词` });
+      setIsAssembling(false);
+    },
+    onError: (e) => {
+      toast({ title: '装配失败', description: e.message, variant: 'destructive' });
+      setIsAssembling(false);
+    },
+  });
+
+  const handleAssemble = () => {
+    setIsAssembling(true);
+    assembleMutation.mutate({ blueprintId });
+  };
 
   const recommend = trpc.blueprint.recommendAtoms.useQuery({ blueprintId: id, slotKey: pickerSlot }, { enabled: showPicker && !!pickerSlot });
 
@@ -134,6 +167,57 @@ export default function BlueprintEditorPage() {
             </div>
           )}
         </div>
+      </div>
+      {/* ── 装配预览面板 ── 加在页面底部 */}
+      <div className="mt-8 border-t pt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-base">🔧 蓝图装配预览</h3>
+          <button
+            onClick={handleAssemble}
+            disabled={isAssembling}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+          >
+            {isAssembling ? '装配中…' : '▶ 执行装配'}
+          </button>
+        </div>
+
+        {/* 分槽位显示 */}
+        {previewData && previewData.length > 0 && (
+          <div className="space-y-4">
+            {previewData.map((slot) => (
+              <div key={`${slot.slotKey}-${slot.subSlotKey}`} className="border rounded-lg p-4 bg-gray-50">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-mono text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                    {slot.slotKey}{slot.subSlotKey ? `.${slot.subSlotKey}` : ''}
+                  </span>
+                </div>
+                <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed max-h-48 overflow-y-auto">
+                  {slot.assembledContent || '（暂无内容，需要 active 状态的原子块）'}
+                </pre>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 完整系统提示词输出 */}
+        {assembledResult && (
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium text-gray-600">完整系统提示词</h4>
+              <button
+                onClick={() => navigator.clipboard.writeText(assembledResult)}
+                className="text-xs text-blue-500 hover:text-blue-700"
+              >
+                复制全文
+              </button>
+            </div>
+            <textarea
+              readOnly
+              value={assembledResult}
+              className="w-full h-64 text-xs font-mono border rounded-lg p-3 bg-white resize-none"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

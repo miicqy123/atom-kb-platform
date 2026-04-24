@@ -7,7 +7,13 @@ async function main() {
   // 创建初始租户
   const tenant = await prisma.tenant.upsert({
     where: { id: 'default-tenant' },
-    update: {},
+    update: {
+      name: 'Default Tenant',
+      industry: 'Technology',
+      contactName: 'Admin',
+      contactEmail: 'admin@example.com',
+      status: 'active',
+    },
     create: {
       id: 'default-tenant',
       name: 'Default Tenant',
@@ -18,14 +24,23 @@ async function main() {
     },
   });
 
-  // 创建初始管理员用户
+  // 统一生成管理员密码 hash
+  const adminPasswordHash = await bcrypt.hash('password123', 10);
+
+  // 创建或更新初始管理员用户
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@example.com' },
-    update: {},
+    update: {
+      name: 'Admin User',
+      passwordHash: adminPasswordHash,
+      role: 'SUPER_ADMIN',
+      tenantId: tenant.id,
+      status: 'active',
+    },
     create: {
       email: 'admin@example.com',
       name: 'Admin User',
-      passwordHash: await bcrypt.hash('password123', 10), // 初始密码
+      passwordHash: adminPasswordHash,
       role: 'SUPER_ADMIN',
       tenantId: tenant.id,
       status: 'active',
@@ -35,7 +50,12 @@ async function main() {
   // 创建初始工作空间
   const workspace = await prisma.workspace.upsert({
     where: { id: 'default-workspace' },
-    update: {},
+    update: {
+      name: 'Default Workspace',
+      tenantId: tenant.id,
+      ownerId: adminUser.id,
+      visibility: 'TEAM',
+    },
     create: {
       id: 'default-workspace',
       name: 'Default Workspace',
@@ -53,7 +73,9 @@ async function main() {
         workspaceId: workspace.id,
       },
     },
-    update: {},
+    update: {
+      role: 'TENANT_ADMIN',
+    },
     create: {
       userId: adminUser.id,
       workspaceId: workspace.id,
@@ -64,7 +86,11 @@ async function main() {
   // 创建初始项目
   await prisma.project.upsert({
     where: { id: 'default-project' },
-    update: {},
+    update: {
+      name: 'Default Project',
+      workspaceId: workspace.id,
+      ownerId: adminUser.id,
+    },
     create: {
       id: 'default-project',
       name: 'Default Project',
@@ -73,9 +99,10 @@ async function main() {
     },
   });
 
-  console.log(`Tenant created: ${tenant.id}`);
-  console.log(`Admin user created: ${adminUser.email}`);
-  console.log(`Workspace created: ${workspace.id}`);
+  console.log(`Tenant created/updated: ${tenant.id}`);
+  console.log(`Admin user created/updated: ${adminUser.email}`);
+  console.log(`Admin password reset to: password123`);
+  console.log(`Workspace created/updated: ${workspace.id}`);
 }
 
 main()

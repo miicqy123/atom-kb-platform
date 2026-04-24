@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../trpc";
+import { protectedProcedure, router, permissionProcedure } from "../trpc";
 
 export const blueprintRouter = router({
   // 获取所有蓝图
@@ -449,4 +449,26 @@ export const blueprintRouter = router({
         byStatus,
       };
     }),
-});
+
+  assemble: permissionProcedure('blueprint:assemble')
+    .input(z.object({ blueprintId: z.string() }))
+    .mutation(async ({ input }) => {
+      const { assembleBlueprint } = await import('@/services/assemblyEngine');
+      const result = await assembleBlueprint(input.blueprintId);
+      return { assembled: result };
+    }),
+
+  preview: protectedProcedure
+    .input(z.object({ blueprintId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      const slots = await ctx.prisma.slotConfig.findMany({
+        where: { blueprintId: input.blueprintId },
+        orderBy: { order: 'asc' },
+      });
+      return slots.map((s) => ({
+        slotKey: s.slotKey,
+        subSlotKey: s.subSlotKey,
+        assembledContent: s.assembledContent,
+      }));
+    }),
+  });

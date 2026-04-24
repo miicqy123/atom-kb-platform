@@ -146,8 +146,7 @@ export default function TenantManagementPage() {
     createTenant.mutate({
       name: newTenant.name,
       domain: newTenant.domain,
-      plan: newTenant.plan as any,
-      status: "TRIAL"
+      status: "trial"
     });
   };
 
@@ -157,7 +156,6 @@ export default function TenantManagementPage() {
         id: editingTenant.id,
         name: editingTenant.name,
         domain: editingTenant.domain,
-        plan: editingTenant.plan,
         status: editingTenant.status
       });
     }

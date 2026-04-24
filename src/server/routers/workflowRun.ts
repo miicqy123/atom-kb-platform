@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { router, withPermission } from "../trpc";
+import { router, withPermission, protectedProcedure } from "../trpc";
+import { runBlueprint } from '@/services/executionLoop';
 
 export const workflowRunRouter = router({
   list: withPermission("orchestration", "read")
@@ -102,5 +103,66 @@ export const workflowRunRouter = router({
       return ctx.prisma.workflowRun.delete({
         where: { id: input.id }
       });
+    }),
+
+  execute: protectedProcedure
+    .input(z.object({
+      blueprintId: z.string(),
+      projectId: z.string(),
+      userQuery: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const result = await runBlueprint(input.blueprintId, input.projectId, input.userQuery);
+
+      setTimeout(async () => {
+        try {
+          const { checkAndCreateIncidents } = await import('@/services/incidentService');
+          await checkAndCreateIncidents(input.projectId);
+        } catch (e) {
+          console.error('Incident check failed:', e);
+        }
+      }, 0);
+
+      return result;
+    }),
+
+  // 三路业务结果回流
+  reportBusinessResult: protectedProcedure
+    .input(z.object({
+      runId: z.string(),
+      // A路：用户满意度反馈
+      userSatisfactionScore: z.number().min(1).max(5).optional(),
+      userComment: z.string().optional(),
+      // B路：业务指标
+      conversionRate: z.number().optional(),
+      sessionDurationSec: z.number().optional(),
+      businessMetric: z.string().optional(),
+      // C路：下游系统回传
+      downstreamSystem: z.string().optional(),
+      downstreamResult: z.string().optional(),
+      downstreamScore: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const updated = await ctx.prisma.workflowRun.update({
+        where: { id: input.runId },
+        data: {
+          businessResultA: input.userSatisfactionScore != null ? {
+            score: input.userSatisfactionScore,
+            comment: input.userComment,
+            reportedAt: new Date().toISOString(),
+          } : undefined,
+          businessResultB: input.conversionRate != null ? {
+            conversionRate: input.conversionRate,
+            sessionDurationSec: input.sessionDurationSec,
+            metric: input.businessMetric,
+          } : undefined,
+          businessResultC: input.downstreamSystem ? {
+            system: input.downstreamSystem,
+            result: input.downstreamResult,
+            score: input.downstreamScore,
+          } : undefined,
+        },
+      });
+      return updated;
     }),
 });

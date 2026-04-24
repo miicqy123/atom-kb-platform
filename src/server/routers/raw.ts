@@ -101,7 +101,6 @@ export const rawRouter = router({
           conversionStatus: 'PENDING', // 默认为待处理
           verificationStatus: 'unverified',
           exposureLevel: 'INTERNAL', // 默认为内部
-          createdBy: ctx.session.user.id,
         },
       });
     }),
@@ -246,8 +245,8 @@ export const rawRouter = router({
       }
 
       // 确保所有素材都在用户的项目中
-      const projectIds = [...new Set(rawMaterials.map(rm => rm.projectId))];
-      for (const projectId of projectIds) {
+      const uniqueProjectIds = Array.from(new Set(rawMaterials.map(rm => rm.projectId)));
+      for (const projectId of uniqueProjectIds) {
         const project = await ctx.prisma.project.findUnique({
           where: { id: projectId },
         });

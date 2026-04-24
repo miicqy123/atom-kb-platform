@@ -14,25 +14,29 @@ import { Badge } from "@/components/ui/Badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
-import { Plus, Edit, Trash2, Globe, RotateCcw, Save, X, CheckCircle, AlertTriangle, Server, Zap } from "lucide-react";
+import { Plus, Edit, Trash2, Globe, RotateCcw, Save, X, CheckCircle, AlertTriangle, Server, Zap, Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ModelGatewayConfigPage() {
   const { toast } = useToast();
-  const { currentProject } = useProjectStore();
+  const { projectId } = useProjectStore();
   const [activeTab, setActiveTab] = useState("routing");
   const [editingRule, setEditingRule] = useState<any>(null);
   const [newRule, setNewRule] = useState({ name: "", providerId: "openai", modelIds: [], weight: 50, priority: 1, enabled: true });
   const [newEndpoint, setNewEndpoint] = useState({ providerId: "openai", region: "", endpointUrl: "", apiKey: "" });
+  const [newApiKey, setNewApiKey] = useState({ name: "", projectId: "", rateLimit: 60, callerType: "EXTERNAL" as const });
 
   const utils = trpc.useUtils();
+
+  // 获取API Keys
+  const { data: apiKeys, refetch: refetchApiKeys } = trpc.gateway.listApiKeys.useQuery();
 
   // 获取模型提供商
   const { data: providers } = trpc.modelGateway.getProviders.useQuery();
 
   // 获取路由规则
   const { data: routingRules, refetch: refetchRoutingRules } = trpc.modelGateway.getRoutingRules.useQuery({
-    projectId: currentProject?.id
+    projectId: projectId
   });
 
   // 获取端点
@@ -120,6 +124,45 @@ export default function ModelGatewayConfigPage() {
     }
   });
 
+  // Mutation for creating API key
+  const createApiKeyMutation = trpc.gateway.createApiKey.useMutation({
+    onSuccess: (d) => {
+      toast({ title: `API Key 已创建：${d.name}`, description: `Key: ${d.key.substring(0, 12)}...` });
+      refetchApiKeys();
+
+      // Copy to clipboard
+      navigator.clipboard.writeText(d.key).then(() => {
+        toast({ title: "已复制", description: "API Key 已复制到剪贴板" });
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "错误",
+        description: error.message || "创建API Key时出错",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation for revoking API key
+  const revokeApiKeyMutation = trpc.gateway.revokeApiKey.useMutation({
+    onSuccess: () => {
+      toast({
+        title: "成功",
+        description: "API Key 已撤销",
+      });
+      utils.gateway.listApiKeys.invalidate();
+      refetchApiKeys();
+    },
+    onError: (error) => {
+      toast({
+        title: "错误",
+        description: error.message || "撤销API Key时出错",
+        variant: "destructive",
+      });
+    }
+  });
+
   const handleSubmitRule = () => {
     createRuleMutation.mutate({
       name: newRule.name,
@@ -128,7 +171,7 @@ export default function ModelGatewayConfigPage() {
       weight: newRule.weight,
       priority: newRule.priority,
       enabled: newRule.enabled,
-      projectId: currentProject?.id
+      projectId: projectId
     });
   };
 
@@ -165,11 +208,12 @@ export default function ModelGatewayConfigPage() {
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="providers">模型提供商</TabsTrigger>
           <TabsTrigger value="routing">路由规则</TabsTrigger>
           <TabsTrigger value="endpoints">端点管理</TabsTrigger>
           <TabsTrigger value="balancing">负载均衡</TabsTrigger>
+          <TabsTrigger value="apikeys">API 密钥</TabsTrigger>
         </TabsList>
 
         <TabsContent value="providers" className="mt-6">
@@ -602,6 +646,160 @@ export default function ModelGatewayConfigPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="apikeys" className="mt-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">API 密钥管理</h2>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  创建 API Key
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>创建新的 API Key</DialogTitle>
+                  <DialogDescription>为项目生成用于访问 API 的认证密钥</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="apiKeyName">密钥名称</Label>
+                    <Input
+                      id="apiKeyName"
+                      value={newApiKey.name}
+                      onChange={(e) => setNewApiKey({...newApiKey, name: e.target.value})}
+                      placeholder="例如：生产环境应用"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="apiKeyProject">项目</Label>
+                    <Select value={newApiKey.projectId} onValueChange={(val) => setNewApiKey({...newApiKey, projectId: val})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择项目" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {/* 这里应该有项目列表，但为了简化，我们暂时保留此占位符 */}
+                        <SelectItem value={projectId}>{projectId}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="rateLimit">速率限制 (每分钟)</Label>
+                    <Input
+                      id="rateLimit"
+                      type="number"
+                      value={newApiKey.rateLimit}
+                      onChange={(e) => setNewApiKey({...newApiKey, rateLimit: parseInt(e.target.value) || 60})}
+                      min="1"
+                      max="10000"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>调用者类型</Label>
+                    <Select value={newApiKey.callerType} onValueChange={(val) => setNewApiKey({...newApiKey, callerType: val as any})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="INTERNAL">内部</SelectItem>
+                        <SelectItem value="EXTERNAL">外部</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setNewApiKey({ name: "", projectId: projectId, rateLimit: 60, callerType: "EXTERNAL" })}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    onClick={() => createApiKeyMutation.mutate({
+                      name: newApiKey.name,
+                      projectId: newApiKey.projectId || projectId,
+                      rateLimit: newApiKey.rateLimit,
+                      callerType: newApiKey.callerType
+                    })}
+                    disabled={createApiKeyMutation.isPending}
+                  >
+                    {createApiKeyMutation.isPending ? '创建中...' : '创建'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>名称</TableHead>
+                <TableHead>Key</TableHead>
+                <TableHead>项目</TableHead>
+                <TableHead>速率限制</TableHead>
+                <TableHead>调用者类型</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>创建时间</TableHead>
+                <TableHead>操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {apiKeys?.map(key => (
+                <TableRow key={key.id}>
+                  <TableCell className="font-medium">{key.name}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {key.key.substring(0, 12)}...
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-2 p-1 h-auto"
+                      onClick={() => {
+                        navigator.clipboard.writeText(key.key);
+                        toast({ title: "已复制", description: "API Key 已复制到剪贴板" });
+                      }}
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </TableCell>
+                  <TableCell>{key.projectId}</TableCell>
+                  <TableCell>{key.rateLimit}/分钟</TableCell>
+                  <TableCell>
+                    <Badge variant={(key.callerType as any) === 'INTERNAL' ? 'default' : 'outline'}>
+                      {key.callerType}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {key.isActive ? (
+                      <Badge variant="default">激活</Badge>
+                    ) : (
+                      <Badge variant="outline">已停用</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>{new Date(key.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {!key.isActive ? (
+                        <Button variant="outline" size="sm" disabled>
+                          已撤销
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => revokeApiKeyMutation.mutate({ id: key.id })}
+                          disabled={revokeApiKeyMutation.isPending}
+                        >
+                          撤销
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </TabsContent>
       </Tabs>
     </div>

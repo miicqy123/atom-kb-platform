@@ -31,3 +31,7 @@ npm-debug.log*
 # Uploaded files (if stored locally)
 uploads/
 public/uploads/
+uploads/*.pdf
+uploads/*.docx
+uploads/*.mp3
+uploads/*.mp4

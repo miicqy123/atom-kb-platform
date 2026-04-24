@@ -1,159 +1,123 @@
 "use client";
-
-import { useState } from "react";
-import { trpc } from "@/lib/trpc";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { SlotTag } from "@/components/ui/SlotTag";
-import { Save, Plus, Edit, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import BasePackDialog from "@/components/prompt/BasePackDialog";
-import { useToast } from "@/hooks/use-toast";
-
-const SLOT_NAMES: Record<string, string> = { S0: "全局人设", S1: "任务指令", S2: "用户画像", S3: "预检规则", S4: "知识注入", S5: "主执行", S6: "路由调度", S7: "输出格式", S8: "对抗验证", S9: "质量报告", S10: "元指令" };
+import { useState } from 'react';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { trpc } from '@/lib/trpc';
+import { useToast } from '@/hooks/use-toast';
+import { useProjectStore } from '@/stores/projectStore';
 
 export default function BasePacksPage() {
+  const { projectId } = useProjectStore();
   const { toast } = useToast();
-  const utils = trpc.useUtils();
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ slotKey: 'S0', content: '', scope: 'GLOBAL' });
 
-  const { data: packs } = trpc.basePack.list.useQuery();
-  const updatePack = trpc.basePack.update.useMutation();
-  const deletePack = trpc.basePack.delete.useMutation({
-    onSuccess: () => {
-      toast({
-        title: "删除成功",
-        description: "蓝图已成功删除",
-      });
-      utils.basePack.list.invalidate(); // 使缓存失效
-    },
-    onError: (error) => {
-      toast({
-        title: "删除失败",
-        description: error.message || "删除蓝图时出现错误",
-        variant: "destructive",
-      });
-    }
+  const { data, refetch } = trpc.basePack.list.useQuery();
+
+  const createMutation = trpc.basePack.create.useMutation({
+    onSuccess: () => { toast({ title: 'BasePack 已创建' }); setCreating(false); setForm({ slotKey: 'S0', content: '', scope: 'GLOBAL' }); refetch(); },
+    onError: (e) => toast({ title: '创建失败', description: e.message, variant: 'destructive' }),
   });
 
-  const [selectedSlot, setSelectedSlot] = useState("S0");
-  const [editContent, setEditContent] = useState("");
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [editingPack, setEditingPack] = useState<any>(null);
-
-  const selectedPack = packs?.find((p: any) => p.slotKey === selectedSlot && !p.subSlotKey);
+  const deleteMutation = trpc.basePack.delete.useMutation({
+    onSuccess: () => { toast({ title: '已删除' }); refetch(); },
+    onError: (e) => toast({ title: '删除失败', description: e.message, variant: 'destructive' }),
+  });
 
   return (
-    <div>
-      <PageHeader title="通用底座包管理" description="管理 S0-S10 全部槽位的通用底座包模板"
-        actions={
-          <Button onClick={() => setShowCreateDialog(true)} className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm text-white">
-            <Plus className="h-4 w-4" />新建蓝图
-          </Button>
-        }
-      />
+    <div className="p-6">
+      <PageHeader title="BasePack 基础包" description="可复用的提示词基础包，供蓝图引用" />
 
-      <div className="grid grid-cols-4 gap-6">
-        <div className="col-span-1 rounded-xl border bg-white p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold">槽位树</h3>
-          </div>
-          <div className="space-y-1">
-            {Object.entries(SLOT_NAMES).map(([key, name]) => (
-              <div key={key} className="flex items-center justify-between">
-                <button onClick={() => {
-                  setSelectedSlot(key);
-                  const p = packs?.find((x: any) => x.slotKey === key && !x.subSlotKey);
-                  setEditContent(p?.content ?? "");
-                }}
-                  className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${selectedSlot === key ? "bg-pf/10 text-pf" : "hover:bg-gray-50"}`}>
-                  <SlotTag slot={key} />
-                  <span className="text-xs">{name}</span>
-                </button>
-                <div className="flex gap-1">
-                  <Button size="xs" variant="ghost" onClick={() => {
-                    const pack = packs?.find((x: any) => x.slotKey === key && !x.subSlotKey);
-                    if (pack) {
-                      setEditingPack(pack);
-                    }
-                  }} disabled={!packs?.some((x: any) => x.slotKey === key && !x.subSlotKey)}>
-                    <Edit className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="col-span-3 rounded-xl border bg-white p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold">{selectedSlot} · {SLOT_NAMES[selectedSlot]} 底座包</h3>
-            <div className="flex items-center gap-2">
-              {selectedPack && <span className="text-xs text-gray-400">v{selectedPack.version}</span>}
-              <Button
-                onClick={() => selectedPack && updatePack.mutate({
-                  id: selectedPack.id,
-                  content: editContent,
-                  name: selectedPack.name
-                })}
-                disabled={updatePack.isPending}
-                className="flex items-center gap-1 rounded-lg bg-pf px-3 py-1.5 text-xs text-white hover:bg-pf/90"
-              >
-                <Save className="h-3 w-3" />保存
-              </Button>
-            </div>
-          </div>
-          <textarea
-            value={editContent}
-            onChange={e => setEditContent(e.target.value)}
-            className="h-96 w-full rounded-lg border p-4 font-mono text-sm leading-relaxed focus:border-pf focus:outline-none focus:ring-1 focus:ring-pf"
-            placeholder="在此编辑底座包内容…"
-          />
-          <div className="mt-3 flex gap-4 text-xs text-gray-400">
-            <span>应用范围: {selectedPack?.scope ?? "全局"}</span>
-            {selectedPack && (
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEditingPack(selectedPack);
-                  }}
-                >
-                  <Edit className="h-3 w-3 mr-1" /> 编辑
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    if (window.confirm(`确定要删除蓝图 "${selectedPack.name}" 吗？此操作不可撤销。`)) {
-                      deletePack.mutate({ id: selectedPack.id });
-                    }
-                  }}
-                  disabled={deletePack.isPending}
-                >
-                  <Trash2 className="h-3 w-3 mr-1 text-red-500" /> 删除
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
+      <div className="flex justify-end mt-4 mb-6">
+        <button
+          onClick={() => setCreating(true)}
+          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+        >+ 新建 BasePack</button>
       </div>
 
-      <BasePackDialog
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
-        onComplete={() => {
-          setShowCreateDialog(false);
-        }}
-      />
+      <div className="grid grid-cols-2 gap-4">
+        {data?.items?.map(pack => (
+          <div key={pack.id} className="border rounded-xl p-5">
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="font-semibold text-sm">{pack.slotKey}</h3>
+              <button
+                onClick={() => deleteMutation.mutate({ id: pack.id })}
+                className="text-xs text-red-400 hover:text-red-600"
+              >删除</button>
+            </div>
+            <pre className="text-xs text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-wrap max-h-32 overflow-y-auto font-sans">
+              {pack.content?.slice(0, 300)}{(pack.content?.length ?? 0) > 300 ? '…' : ''}
+            </pre>
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">{pack.scope}</span>
+              <span className="text-xs text-gray-400">v{pack.version}</span>
+            </div>
+          </div>
+        ))}
+        {(!data?.items?.length) && (
+          <div className="col-span-2 text-center py-16 text-gray-400 text-sm">
+            暂无 BasePack，点击右上角新建
+          </div>
+        )}
+      </div>
 
-      <BasePackDialog
-        open={!!editingPack}
-        onOpenChange={() => setEditingPack(null)}
-        pack={editingPack}
-        onComplete={() => {
-          setEditingPack(null);
-        }}
-      />
+      {/* 新建弹窗 */}
+      {creating && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-[560px] shadow-2xl">
+            <h3 className="font-semibold mb-4">新建 BasePack</h3>
+            <div className="space-y-4">
+              <select
+                value={form.slotKey}
+                onChange={e => setForm(f => ({ ...f, slotKey: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="S0">S0 - 全局人设</option>
+                <option value="S1">S1 - 任务指令</option>
+                <option value="S2">S2 - 用户画像</option>
+                <option value="S3">S3 - 预调规则</option>
+                <option value="S4">S4 - 知识注入</option>
+                <option value="S5">S5 - 主执行</option>
+                <option value="S6">S6 - 路由调度</option>
+                <option value="S7">S7 - 输出格式</option>
+                <option value="S8">S8 - 对抗验证</option>
+                <option value="S9">S9 - 质量报告</option>
+                <option value="S10">S10 - 元指令</option>
+              </select>
+              <select
+                value={form.scope}
+                onChange={e => setForm(f => ({ ...f, scope: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="GLOBAL">全局</option>
+                <option value="PROJECT">项目</option>
+                <option value="TEAM">团队</option>
+              </select>
+              <textarea
+                value={form.content}
+                onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+                placeholder="BasePack 内容（提示词片段）"
+                className="w-full border rounded-lg px-3 py-2 text-sm h-40 resize-none"
+              />
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => createMutation.mutate({
+                  slotKey: form.slotKey,
+                  content: form.content,
+                  scope: form.scope
+                })}
+                disabled={!form.slotKey || !form.content || createMutation.isPending}
+                className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-40"
+              >
+                {createMutation.isPending ? '创建中…' : '创建'}
+              </button>
+              <button onClick={() => setCreating(false)} className="px-4 py-2 border rounded-lg text-sm">
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

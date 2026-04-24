@@ -11,7 +11,7 @@ import { Plus, Search } from "lucide-react";
 import Link from "next/link";
 
 export default function BlueprintsPage() {
-  const { currentProject } = useProjectStore();
+  const { projectId } = useProjectStore();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -20,13 +20,13 @@ export default function BlueprintsPage() {
   const offset = (page - 1) * limit;
 
   const { data, isLoading } = trpc.blueprint.getAll.useQuery({
-    projectId: currentProject?.id ?? "",
+    projectId: projectId ?? "",
     search: search || undefined,
     status: statusFilter || undefined,
     limit,
     offset
   }, {
-    enabled: !!currentProject
+    enabled: !!projectId
   });
 
   const columns = [
@@ -73,6 +73,11 @@ export default function BlueprintsPage() {
               <div className="mt-3 flex items-center justify-between">
                 <span className="text-xs text-gray-400">v{bp.version} · 引用 {bp._count?.atoms ?? 0} 原子块</span>
                 {bp.qualityPassRate != null && <ConfidenceBar value={bp.qualityPassRate} />}
+              </div>
+              <div className="mt-2 pt-2 border-t text-right">
+                <Link href={`/prompts/blueprints/${bp.id}/slots`} className="text-xs text-blue-500 hover:underline">
+                  配置槽位
+                </Link>
               </div>
             </Link>
           ))}

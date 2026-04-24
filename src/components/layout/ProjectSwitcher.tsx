@@ -1,29 +1,38 @@
+// src/components/layout/ProjectSwitcher.tsx
 "use client";
-
-import { useState } from "react";
-import { ChevronDown, FolderKanban } from "lucide-react";
-import { useProjectStore } from "@/stores/projectStore";
+import { trpc } from '@/lib/trpc';
+import { useProjectStore } from '@/stores/projectStore';
 
 export function ProjectSwitcher() {
-  const { currentProject, projects, setCurrentProject } = useProjectStore();
-  const [open, setOpen] = useState(false);
+  const { projectId, projectName, setProject } = useProjectStore();
+  const { data: userData } = trpc.user.getCurrent.useQuery();
+  const workspaceId = userData?.workspaces?.[0]?.workspaceId || '';
+
+  const { data } = trpc.project.list.useQuery(
+    { workspaceId, limit: 50 },
+    { enabled: !!workspaceId }
+  );
 
   return (
-    <div className="relative">
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50">
-        <FolderKanban className="h-4 w-4 text-brand" />
-        <span className="font-medium">{currentProject?.name ?? "选择 Project"}</span>
-        <ChevronDown className="h-4 w-4 text-gray-400" />
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 z-50 mt-1 w-56 rounded-lg border bg-white py-1 shadow-lg">
-          {projects.map((p) => (
-            <button key={p.id} onClick={() => { setCurrentProject(p); setOpen(false); }}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100">
-              {p.name}
-            </button>
-          ))}
-        </div>
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-gray-400">项目：</span>
+      <select
+        value={projectId}
+        onChange={e => {
+          const selected = data?.items?.find(p => p.id === e.target.value);
+          if (selected) setProject(selected.id, selected.name, workspaceId);
+        }}
+        className="border rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 max-w-[180px] truncate"
+      >
+        <option value="">选择项目</option>
+        {data?.items?.map(p => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
+      {projectName && (
+        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded truncate max-w-[100px]">
+          {projectName}
+        </span>
       )}
     </div>
   );

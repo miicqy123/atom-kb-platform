@@ -69,7 +69,7 @@ function DeleteConfirmDialog({ agentName, onConfirm, onCancel, isLoading }: Dele
 
 export default function AgentsPage() {
   const { toast } = useToast();
-  const { currentProject } = useProjectStore();
+  const { projectId } = useProjectStore();
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
@@ -77,8 +77,8 @@ export default function AgentsPage() {
   const utils = trpc.useUtils();
 
   const { data, isLoading } = trpc.agent.getAll.useQuery(
-    { projectId: currentProject?.id ?? "" },
-    { enabled: !!currentProject }
+    { projectId: projectId ?? "" },
+    { enabled: !!projectId }
   );
 
   const agents = data?.items ?? [];
@@ -163,7 +163,6 @@ export default function AgentsPage() {
                 </div>
                 <StatusBadge
                   status={AGENT_STATUS_MAP[agent.status] ?? "PENDING"}
-                  label={AGENT_STATUS_LABEL[agent.status]}
                 />
               </div>
 
@@ -240,7 +239,7 @@ export default function AgentsPage() {
         open={dialogMode !== null}
         onOpenChange={(open) => { if (!open) handleCloseDialog(); }}
         agent={editingAgent}
-        projectId={currentProject?.id ?? ""}
+        projectId={projectId ?? ""}
         onComplete={handleCloseDialog}
       />
 

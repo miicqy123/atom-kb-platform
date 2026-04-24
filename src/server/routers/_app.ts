@@ -22,6 +22,12 @@ import { workflowRunRouter } from "./workflowRun";
 import { analyticsRouter } from "./analytics";
 import { roleRouter } from "./role";
 import { taxonomyRouter } from "./taxonomy";
+import { pipelineRouter } from "./pipeline";
+import { vectorRouter } from './vector';
+import { slotConfigRouter } from './slotConfig';
+import { dimensionRouter } from './dimension';
+import { gatewayRouter } from './gateway';
+import { orchestrationRouter } from './orchestration';
 
 export const appRouter = router({
   raw: rawRouter,
@@ -48,6 +54,12 @@ export const appRouter = router({
   analytics: analyticsRouter,
   role: roleRouter,
   taxonomy: taxonomyRouter,
+  pipeline: pipelineRouter,
+  vector: vectorRouter,
+  slotConfig: slotConfigRouter,
+  dimension: dimensionRouter,
+  gateway: gatewayRouter,
+  orchestration: orchestrationRouter,
 });
 
 export type AppRouter = typeof appRouter;

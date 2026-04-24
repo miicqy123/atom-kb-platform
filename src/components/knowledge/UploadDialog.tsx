@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { trpc } from '@/lib/trpc';
 import { useToast } from '@/hooks/use-toast';
+import { useProjectStore } from '@/stores/projectStore';
 
 interface UploadDialogProps {
   open: boolean;
@@ -12,14 +13,16 @@ interface UploadDialogProps {
   projectId?: string; // 如果有默认项目ID
 }
 
-export default function UploadDialog({ open, onOpenChange, projectId = 'test-project' }: UploadDialogProps) {
+export default function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
   const [title, setTitle] = useState('');
   const [materialType, setMaterialType] = useState<'THEORY' | 'CASE_STUDY' | 'METHODOLOGY' | 'FAQ' | 'SCRIPT' | 'REGULATION' | 'PRODUCT_DOC' | 'TRAINING_MATERIAL' | 'MEETING_RECORD' | 'CUSTOMER_VOICE' | 'INDUSTRY_REPORT' | 'COMPETITOR_ANALYSIS' | 'INTERNAL_WIKI' | 'OTHER'>('THEORY');
+  const [experienceSource, setExperienceSource] = useState<'E1_COMPANY' | 'E2_INDUSTRY' | 'E3_CROSS_INDUSTRY'>('E1_COMPANY');
   const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState('');
   const [uploading, setUploading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const { projectId } = useProjectStore();
 
   // 用于手动触发数据刷新
   const utils = trpc.useUtils();
@@ -51,8 +54,9 @@ export default function UploadDialog({ open, onOpenChange, projectId = 'test-pro
       const formData = new FormData();
       formData.append('file', file);
       formData.append('title', title);
-      formData.append('projectId', projectId);
-      formData.append('materialType', materialType);
+      formData.append('projectId', projectId);          // 从 useProjectStore 获取
+      formData.append('materialType', materialType);     // 来自表单选择
+      formData.append('experienceSource', experienceSource); // 来自表单选择
 
       // 调用文件上传API
       const response = await fetch('/api/upload', {
@@ -72,6 +76,7 @@ export default function UploadDialog({ open, onOpenChange, projectId = 'test-pro
         onOpenChange(false);
         setTitle('');
         setMaterialType('THEORY');
+        setExperienceSource('E1_COMPANY');
         setFile(null);
         setFileName('');
 
@@ -184,6 +189,23 @@ export default function UploadDialog({ open, onOpenChange, projectId = 'test-pro
               <option value="COMPETITOR_ANALYSIS">竞品分析</option>
               <option value="INTERNAL_WIKI">内部知识库</option>
               <option value="OTHER">其他</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="experienceSource" className="block text-sm font-medium text-gray-700 mb-1">
+              经验来源
+            </label>
+            <select
+              id="experienceSource"
+              value={experienceSource}
+              onChange={(e) => setExperienceSource(e.target.value as any)}
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand"
+              required
+            >
+              <option value="E1_COMPANY">公司内部经验</option>
+              <option value="E2_INDUSTRY">行业经验</option>
+              <option value="E3_CROSS_INDUSTRY">跨行业经验</option>
             </select>
           </div>
 

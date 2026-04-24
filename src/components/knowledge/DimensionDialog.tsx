@@ -95,14 +95,14 @@ export default function DimensionDialog({ open, onOpenChange, dimension, onCompl
         id: dimension.id,
         number,
         name,
-        layer
+        layer: layer as 'A' | 'B' | 'C' | 'D',
       });
     } else {
       // 创建新维度
       createDimensionMutation.mutate({
         number,
         name,
-        layer,
+        layer: layer as 'A' | 'B' | 'C' | 'D',
         tenantId: 'default-tenant' // 实际应用中应从上下文获取
       });
     }

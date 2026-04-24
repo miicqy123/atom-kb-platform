@@ -31,11 +31,11 @@ const MOCK_COST_PIE = [
 export default function GovernanceDashboard() {
   const [tab, setTab] = useState(0);
   const TABS = ["装配运行", "质量评分", "成本大盘", "红线异常"];
-  const { currentProject } = useProjectStore();
+  const { projectId } = useProjectStore();
 
   const { data: projectDashboardData } = trpc.dashboard.getProjectDashboard.useQuery(
-    { projectId: currentProject?.id || "default-project" },
-    { enabled: !!currentProject }
+    { projectId: projectId || "default-project" },
+    { enabled: !!projectId }
   );
 
   const { data: systemDashboardData } = trpc.dashboard.getSystemDashboard.useQuery(undefined, {
@@ -43,18 +43,18 @@ export default function GovernanceDashboard() {
   });
 
   const { data: workflowRunData } = trpc.analytics.runTrend.useQuery(
-    { projectId: currentProject?.id || "default-project", days: 14 },
-    { enabled: !!currentProject }
+    { projectId: projectId || "default-project", days: 14 },
+    { enabled: !!projectId }
   );
 
   const { data: qualityData } = trpc.analytics.qualityTrend.useQuery(
-    { projectId: currentProject?.id || "default-project" },
-    { enabled: !!currentProject }
+    { projectId: projectId || "default-project" },
+    { enabled: !!projectId }
   );
 
   const { data: slaData } = trpc.analytics.slaMetrics.useQuery(
-    { projectId: currentProject?.id || "default-project" },
-    { enabled: !!currentProject }
+    { projectId: projectId || "default-project" },
+    { enabled: !!projectId }
   );
 
   const { data: incidents } = trpc.analytics.incidentList.useQuery({});

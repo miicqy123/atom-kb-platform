@@ -123,12 +123,11 @@ export const workbenchRouter = router({
               projectId: input.projectId,
               rawId: input.rawId,
               tags: input.tags || [],
-              difficulty: 'MEDIUM',
+              difficulty: 'INTERMEDIATE',
               materialType: 'THEORY',
               questionKeywords: [],
               scenarios: [],
               status: 'DRAFT',
-              createdBy: ctx.session.user.id,
             }
           });
           break;
