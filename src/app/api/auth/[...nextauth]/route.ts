@@ -15,24 +15,40 @@ const handler = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        try {
+          console.log("[AUTH] authorize called with email:", credentials?.email);
+          if (!credentials?.email || !credentials?.password) {
+            console.log("[AUTH] missing credentials");
+            return null;
+          }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        });
+          console.log("[AUTH] looking up user in database...");
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email },
+          });
+          console.log("[AUTH] user found:", !!user, "has password:", !!user?.passwordHash);
 
-        if (!user || !user.passwordHash) return null;
+          if (!user || !user.passwordHash) {
+            console.log("[AUTH] no user or no password hash");
+            return null;
+          }
 
-        const valid = await compare(credentials.password as string, user.passwordHash);
-        if (!valid) return null;
+          const valid = await compare(credentials.password, user.passwordHash);
+          console.log("[AUTH] password valid:", valid);
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          tenantId: user.tenantId,
-        };
+          if (!valid) return null;
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            tenantId: user.tenantId,
+          };
+        } catch (error) {
+          console.error("[AUTH] error in authorize:", error);
+          return null;
+        }
       },
     }),
   ],

@@ -4,7 +4,10 @@
       "Bash(dir \"..\\\\前端工程代码·布局 + 通用组件 + 知识中心 + 提示词工厂（KC-01~07·PF-01.md\")",
       "Bash(dir \"前端工程代码·布局 + 通用组件 + 知识中心 + 提示词工厂（KC-01~07·PF-01.md\")",
       "Bash(npm run *)",
-      "Bash(curl -I http://localhost:3000/login)"
+      "Bash(curl -I http://localhost:3000/login)",
+      "Bash(npx tsc *)",
+      "Bash(npx prisma *)",
+      "Bash(npm install *)"
     ]
   }
 }
