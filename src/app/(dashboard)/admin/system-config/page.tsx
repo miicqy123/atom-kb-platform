@@ -1,506 +1,207 @@
-"use client";
-
+﻿"use client";
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Label } from "@/components/ui/Label";
-import { Switch } from "@/components/ui/Switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { Badge } from "@/components/ui/Badge";
-import { Separator } from "@/components/ui/Separator";
-import { formatDateTime } from "@/lib/utils";
-import {
-  Settings,
-  Database,
-  Server,
-  Lock,
-  Shield,
-  Key,
-  Activity,
-  Bell,
-  Mail,
-  Globe,
-  Eye,
-  Clock,
-  AlertTriangle,
-  CheckCircle,
-  Info
-} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ChevronRight, Plus, Trash2, Edit, Check, Settings, Database, Cpu, Activity, Server, Eye } from "lucide-react";
+
+/* ── 左侧配置分类 ── */
+const CATEGORIES = [
+  { id: "tags", label: "标签体系", icon: Settings },
+  { id: "knowledge-engine", label: "知识加工引擎", icon: Cpu },
+  { id: "assembly-engine", label: "装配引擎", icon: Database },
+  { id: "runtime", label: "运行时", icon: Activity },
+  { id: "vector", label: "向量层", icon: Server },
+  { id: "observability", label: "可观测性", icon: Eye },
+];
+
+/* ── 标签体系数据 ── */
+const DIMENSIONS = Array.from({ length: 30 }, (_, i) => ({
+  id: i + 1,
+  name: [
+    "品牌定位","品牌故事","产品卖点","技术参数","工艺流程",
+    "原料溯源","价值主张","对标竞品","客户画像","场景痛点",
+    "服务承诺","售后保障","安装指导","维护保养","环保认证",
+    "行业标准","法规合规","价格策略","促销活动","渠道政策",
+    "培训体系","团队管理","绩效考核","客户案例","市场分析",
+    "竞争情报","供应链","质量控制","创新研发","合规声明"
+  ][i] || `维度${i + 1}`,
+}));
+
+const LAYERS = [
+  { id: "A", name: "A 认知层", color: "#6366f1", desc: "品牌认知、行业知识等基础信息" },
+  { id: "B", name: "B 技能层", color: "#06b6d4", desc: "话术技能、沟通方法等实操内容" },
+  { id: "C", name: "C 风格红线层", color: "#f97316", desc: "品牌调性、违禁词、红线规则" },
+  { id: "D", name: "D 系统合规层", color: "#8b5cf6", desc: "法规合规、系统指令、兜底策略" },
+];
+
+const SLOTS = [
+  { key: "S0", name: "系统人设", subs: ["S0.1 角色定义","S0.2 能力边界","S0.3 客户画像"] },
+  { key: "S1", name: "品牌认知", subs: ["S1.1 品牌故事","S1.2 核心价值","S1.3 创始故事","S1.4 品牌VI"] },
+  { key: "S2", name: "行业知识", subs: ["S2.1 行业概况","S2.2 市场趋势","S2.3 技术标准"] },
+  { key: "S3", name: "输入预检", subs: ["S3.1 意图识别","S3.2 实体抽取"] },
+  { key: "S4", name: "用户理解", subs: ["S4.1 画像匹配","S4.2 需求分析"] },
+  { key: "S5", name: "主执行引擎", subs: ["S5.1 内容生成","S5.2 话术组装","S5.3 个性化调整"] },
+  { key: "S6", name: "路由判断", subs: ["S6.1 场景路由","S6.2 能力路由"] },
+  { key: "S7", name: "输出格式", subs: ["S7.1 结构化输出","S7.2 富文本格式"] },
+  { key: "S8", name: "对抗验证", subs: ["S8.1 红线扫描","S8.2 事实核查","S8.3 占位符检查"] },
+  { key: "S9", name: "质量报告", subs: ["S9.1 综合评分","S9.2 维度评分"] },
+  { key: "S10", name: "兜底策略", subs: ["S10.1 降级回复","S10.2 人工转接"] },
+];
+
+const SCENE_TAGS = {
+  岗位: ["销售岗","客服岗","运营岗","技术支持","培训讲师","市场推广","管理层","新媒体运营","直播主播","社群运营","投手","BD"],
+  平台: ["小红书","抖音","微信","快手","淘宝","京东","官网","线下"],
+  受众: ["宝妈","年轻白领","中老年","装修业主","设计师","经销商","工程客户","高端客户","预算敏感","环保关注","品质追求","健康关注","颜值控","实用主义","KOL"],
+  业务线: ["零售","工程","加盟","电商","定制","批发"],
+};
+
+const MATERIAL_TYPES = [
+  "话术库","FAQ","对话录音","经验萃取","产品文档","培训材料",
+  "竞品分析","客户案例","行业报告","政策法规","内部制度","SOP流程","视频脚本","其他"
+];
 
 export default function SystemConfigurationPage() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("general");
-  const [config, setConfig] = useState({
-    // 通用设置
-    systemName: "原子化知识库平台",
-    systemDescription: "企业级AI知识管理平台",
-    maintenanceMode: false,
-    backupEnabled: true,
+  const [activeCategory, setActiveCategory] = useState("tags");
 
-    // 安全设置
-    passwordMinLength: 8,
-    passwordRequireSpecialChar: true,
-    sessionTimeout: 30,
-    twoFactorAuth: false,
-
-    // 邮件设置
-    smtpHost: "smtp.gmail.com",
-    smtpPort: 587,
-    smtpUsername: "",
-    smtpPassword: "",
-
-    // 日志设置
-    logRetentionDays: 90,
-    auditLogging: true,
-
-    // 备份设置
-    backupSchedule: "daily",
-    backupRetention: 30,
-    backupLocation: "/backups"
-  });
-
-  // 获取系统配置（使用现有可用的API）
-  const { data: systemConfig } = trpc.project.list.useQuery({
-    limit: 1,
-    offset: 0,
-  });
-
-  // 保存配置
-  const saveConfig = () => {
-    toast({
-      title: "成功",
-      description: "系统配置已保存",
-    });
-    // 在实际应用中，这里应该调用API保存配置
-  };
-
-  // 重置配置
-  const resetConfig = () => {
-    if (window.confirm("确定要重置所有配置为默认值吗？")) {
-      setConfig({
-        systemName: "原子化知识库平台",
-        systemDescription: "企业级AI知识管理平台",
-        maintenanceMode: false,
-        backupEnabled: true,
-        passwordMinLength: 8,
-        passwordRequireSpecialChar: true,
-        sessionTimeout: 30,
-        twoFactorAuth: false,
-        smtpHost: "smtp.gmail.com",
-        smtpPort: 587,
-        smtpUsername: "",
-        smtpPassword: "",
-        logRetentionDays: 90,
-        auditLogging: true,
-        backupSchedule: "daily",
-        backupRetention: 30,
-        backupLocation: "/backups"
-      });
-      toast({
-        title: "成功",
-        description: "配置已重置为默认值",
-      });
-    }
-  };
-
-  // 渲染通用设置
-  const renderGeneralSettings = () => (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>基础信息</CardTitle>
-          <CardDescription>配置系统的基本信息</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="systemName">系统名称</Label>
-            <Input
-              id="systemName"
-              value={config.systemName}
-              onChange={(e) => setConfig({...config, systemName: e.target.value})}
-              placeholder="输入系统名称"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="systemDescription">系统描述</Label>
-            <Input
-              id="systemDescription"
-              value={config.systemDescription}
-              onChange={(e) => setConfig({...config, systemDescription: e.target.value})}
-              placeholder="输入系统描述"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>系统状态</CardTitle>
-          <CardDescription>控制系统的运行模式</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>维护模式</Label>
-              <p className="text-sm text-muted-foreground">启用后系统将只读，用户无法进行修改操作</p>
+  const renderTagSystem = () => (
+    <div className="space-y-4">
+      {/* 30维度 */}
+      <ConfigSection title="30 维度枚举值管理" status={`已配置 ${DIMENSIONS.length}/30 ✅`}>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {DIMENSIONS.map(d => (
+            <div key={d.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-xs group">
+              <span><span className="text-gray-400 font-mono mr-1">D{String(d.id).padStart(2,"0")}</span> {d.name}</span>
+              <button className="opacity-0 group-hover:opacity-100 transition"><Edit className="h-3 w-3 text-gray-400" /></button>
             </div>
-            <Switch
-              checked={config.maintenanceMode}
-              onCheckedChange={(checked) => setConfig({...config, maintenanceMode: checked})}
-            />
-          </div>
-        </CardContent>
-      </Card>
+          ))}
+        </div>
+        <Button variant="outline" size="sm" className="mt-2 gap-1 text-xs"><Plus className="h-3 w-3" /> 添加维度</Button>
+      </ConfigSection>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>备份设置</CardTitle>
-          <CardDescription>配置自动备份策略</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>启用备份</Label>
-              <p className="text-sm text-muted-foreground">自动备份系统数据</p>
+      {/* ABCD 层级 */}
+      <ConfigSection title="A/B/C/D 层级定义" status="已配置 4/4 ✅">
+        <div className="space-y-2">
+          {LAYERS.map(l => (
+            <div key={l.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border">
+              <span className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style= background: l.color >{l.id}</span>
+              <div className="flex-1">
+                <div className="text-sm font-medium">{l.name}</div>
+                <div className="text-xs text-gray-500">{l.desc}</div>
+              </div>
+              <button><Edit className="h-4 w-4 text-gray-400" /></button>
             </div>
-            <Switch
-              checked={config.backupEnabled}
-              onCheckedChange={(checked) => setConfig({...config, backupEnabled: checked})}
-            />
+          ))}
+        </div>
+      </ConfigSection>
+
+      {/* S0-S10 槽位 */}
+      <ConfigSection title="S0–S10 槽位枚举值" status={`已配置 ${SLOTS.reduce((s,sl)=>s+sl.subs.length,0)} 项 ✅`}>
+        <div className="space-y-2">
+          {SLOTS.map(slot => (
+            <details key={slot.key} className="group border rounded-lg">
+              <summary className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-gray-50">
+                <span className="text-sm font-medium"><span className="font-mono text-blue-600 mr-2">{slot.key}</span>{slot.name}</span>
+                <span className="text-xs text-gray-400">{slot.subs.length} 子槽位</span>
+              </summary>
+              <div className="px-3 pb-2 space-y-1">
+                {slot.subs.map((sub, i) => (
+                  <div key={i} className="flex items-center justify-between pl-6 py-1 text-xs text-gray-600 group/item">
+                    <span>{sub}</span>
+                    <div className="flex gap-1 opacity-0 group-hover/item:opacity-100">
+                      <button><Edit className="h-3 w-3 text-gray-400" /></button>
+                      <button><Trash2 className="h-3 w-3 text-red-400" /></button>
+                    </div>
+                  </div>
+                ))}
+                <Button variant="ghost" size="sm" className="text-xs gap-1 ml-6"><Plus className="h-3 w-3" /> 添加子槽位</Button>
+              </div>
+            </details>
+          ))}
+        </div>
+      </ConfigSection>
+
+      {/* 场景标签 */}
+      {Object.entries(SCENE_TAGS).map(([cat, tags]) => (
+        <ConfigSection key={cat} title={`场景标签（${cat}）`} status={`已配置 ${tags.length} 个`}>
+          <div className="flex flex-wrap gap-2">
+            {tags.map(t => (
+              <span key={t} className="px-2.5 py-1 bg-gray-100 rounded-full text-xs text-gray-700 group flex items-center gap-1">
+                {t}
+                <button className="opacity-0 group-hover:opacity-100"><Trash2 className="h-2.5 w-2.5 text-red-400" /></button>
+              </span>
+            ))}
+            <button className="px-2.5 py-1 border border-dashed rounded-full text-xs text-gray-400 hover:text-gray-600 hover:border-gray-400">+ 添加</button>
           </div>
+        </ConfigSection>
+      ))}
 
-          <Separator />
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>备份频率</Label>
-              <Select value={config.backupSchedule} onValueChange={(val) => setConfig({...config, backupSchedule: val})}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="hourly">每小时</SelectItem>
-                  <SelectItem value="daily">每日</SelectItem>
-                  <SelectItem value="weekly">每周</SelectItem>
-                  <SelectItem value="monthly">每月</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>保留天数</Label>
-              <Input
-                type="number"
-                value={config.backupRetention}
-                onChange={(e) => setConfig({...config, backupRetention: parseInt(e.target.value) || 30})}
-                placeholder="备份保留天数"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>备份位置</Label>
-            <Input
-              value={config.backupLocation}
-              onChange={(e) => setConfig({...config, backupLocation: e.target.value})}
-              placeholder="备份存储路径"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      {/* 材料类型 */}
+      <ConfigSection title="材料类型枚举值" status={`已配置 ${MATERIAL_TYPES.length}/14 ✅`}>
+        <div className="flex flex-wrap gap-2">
+          {MATERIAL_TYPES.map(t => (
+            <span key={t} className="px-2.5 py-1 bg-blue-50 rounded-full text-xs text-blue-700">{t}</span>
+          ))}
+        </div>
+      </ConfigSection>
     </div>
   );
 
-  // 渲染安全设置
-  const renderSecuritySettings = () => (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>密码策略</CardTitle>
-          <CardDescription>配置用户密码的安全要求</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>最小长度</Label>
-            <Input
-              type="number"
-              value={config.passwordMinLength}
-              onChange={(e) => setConfig({...config, passwordMinLength: parseInt(e.target.value) || 8})}
-              placeholder="密码最小长度"
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>特殊字符</Label>
-              <p className="text-sm text-muted-foreground">密码必须包含特殊字符</p>
-            </div>
-            <Switch
-              checked={config.passwordRequireSpecialChar}
-              onCheckedChange={(checked) => setConfig({...config, passwordRequireSpecialChar: checked})}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>会话管理</CardTitle>
-          <CardDescription>配置用户会话超时设置</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>会话超时（分钟）</Label>
-            <Input
-              type="number"
-              value={config.sessionTimeout}
-              onChange={(e) => setConfig({...config, sessionTimeout: parseInt(e.target.value) || 30})}
-              placeholder="会话超时时间（分钟）"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>双因素认证</CardTitle>
-          <CardDescription>增强账户安全性</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>启用双因素认证</Label>
-              <p className="text-sm text-muted-foreground">强制用户使用双重验证</p>
-            </div>
-            <Switch
-              checked={config.twoFactorAuth}
-              onCheckedChange={(checked) => setConfig({...config, twoFactorAuth: checked})}
-            />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-
-  // 渲染邮件设置
-  const renderEmailSettings = () => (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>SMTP 服务器</CardTitle>
-          <CardDescription>配置系统邮件发送服务</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="smtpHost">主机地址</Label>
-              <Input
-                id="smtpHost"
-                value={config.smtpHost}
-                onChange={(e) => setConfig({...config, smtpHost: e.target.value})}
-                placeholder="例如: smtp.gmail.com"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="smtpPort">端口</Label>
-              <Input
-                id="smtpPort"
-                type="number"
-                value={config.smtpPort}
-                onChange={(e) => setConfig({...config, smtpPort: parseInt(e.target.value) || 587})}
-                placeholder="例如: 587"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="smtpUsername">用户名</Label>
-            <Input
-              id="smtpUsername"
-              value={config.smtpUsername}
-              onChange={(e) => setConfig({...config, smtpUsername: e.target.value})}
-              placeholder="邮件服务器用户名"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="smtpPassword">密码</Label>
-            <Input
-              id="smtpPassword"
-              type="password"
-              value={config.smtpPassword}
-              onChange={(e) => setConfig({...config, smtpPassword: e.target.value})}
-              placeholder="邮件服务器密码"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>测试邮件</CardTitle>
-          <CardDescription>发送测试邮件验证配置</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button>发送测试邮件</Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-
-  // 渲染日志设置
-  const renderLoggingSettings = () => (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>日志保留</CardTitle>
-          <CardDescription>配置系统日志的保留时间</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>日志保留天数</Label>
-            <Input
-              type="number"
-              value={config.logRetentionDays}
-              onChange={(e) => setConfig({...config, logRetentionDays: parseInt(e.target.value) || 90})}
-              placeholder="日志保留天数"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>审计日志</CardTitle>
-          <CardDescription>记录关键操作和安全事件</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>启用审计日志</Label>
-              <p className="text-sm text-muted-foreground">记录用户操作和系统事件</p>
-            </div>
-            <Switch
-              checked={config.auditLogging}
-              onCheckedChange={(checked) => setConfig({...config, auditLogging: checked})}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>日志级别</CardTitle>
-          <CardDescription>设置日志详细程度</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select value="info" onValueChange={() => {}}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="debug">调试(Debug)</SelectItem>
-              <SelectItem value="info">信息(Info)</SelectItem>
-              <SelectItem value="warn">警告(Warn)</SelectItem>
-              <SelectItem value="error">错误(Error)</SelectItem>
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
+  const renderPlaceholder = (title: string) => (
+    <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
+      {title} 配置面板（待实现）
     </div>
   );
 
   return (
-    <div>
-      <PageHeader
-        title="系统配置"
-        description="管理系统各项配置参数和全局设置"
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={resetConfig}>
-              重置配置
-            </Button>
-            <Button onClick={saveConfig}>
-              <Settings className="h-4 w-4 mr-2" />
-              保存配置
-            </Button>
-          </div>
-        }
+    <div className="flex flex-col h-full">
+      <PageHeader title="系统配置" description="管理标签体系、引擎参数和系统设置"
+        action={<Button onClick={() => toast({ title: "配置已保存" })} className="bg-brand text-white gap-2"><Check className="h-4 w-4" /> 保存配置</Button>}
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="general">通用设置</TabsTrigger>
-          <TabsTrigger value="security">安全设置</TabsTrigger>
-          <TabsTrigger value="email">邮件设置</TabsTrigger>
-          <TabsTrigger value="logging">日志设置</TabsTrigger>
-        </TabsList>
+      <div className="flex flex-1 overflow-hidden">
+        {/* 左侧分类 */}
+        <div className="w-48 border-r bg-gray-50/50 py-2 flex-shrink-0">
+          {CATEGORIES.map(cat => (
+            <button key={cat.id} onClick={() => setActiveCategory(cat.id)}
+              className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm transition ${
+                activeCategory === cat.id ? "bg-white text-brand font-medium border-r-2 border-brand" : "text-gray-600 hover:bg-white"
+              }`}>
+              <cat.icon className="h-4 w-4" />
+              {cat.label}
+            </button>
+          ))}
+        </div>
 
-        <TabsContent value="general" className="mt-0">
-          {renderGeneralSettings()}
-        </TabsContent>
-
-        <TabsContent value="security" className="mt-0">
-          {renderSecuritySettings()}
-        </TabsContent>
-
-        <TabsContent value="email" className="mt-0">
-          {renderEmailSettings()}
-        </TabsContent>
-
-        <TabsContent value="logging" className="mt-0">
-          {renderLoggingSettings()}
-        </TabsContent>
-      </Tabs>
-
-      {/* 系统信息面板 */}
-      <div className="mt-8 grid grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">系统版本</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">v1.0.0</div>
-            <p className="text-xs text-muted-foreground">最新版本</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">运行时间</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">15d 8h</div>
-            <p className="text-xs text-muted-foreground">系统正常运行</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">内存使用</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">2.4GB</div>
-            <p className="text-xs text-muted-foreground">可用: 7.6GB</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">数据库</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">PostgreSQL</div>
-            <p className="text-xs text-muted-foreground">连接正常</p>
-          </CardContent>
-        </Card>
+        {/* 右侧内容 */}
+        <div className="flex-1 overflow-auto p-6">
+          {activeCategory === "tags" && renderTagSystem()}
+          {activeCategory === "knowledge-engine" && renderPlaceholder("知识加工引擎")}
+          {activeCategory === "assembly-engine" && renderPlaceholder("装配引擎")}
+          {activeCategory === "runtime" && renderPlaceholder("运行时")}
+          {activeCategory === "vector" && renderPlaceholder("向量层")}
+          {activeCategory === "observability" && renderPlaceholder("可观测性")}
+        </div>
       </div>
+    </div>
+  );
+}
+
+/* ── 配置块手风琴组件 ── */
+function ConfigSection({ title, status, children }: { title: string; status: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      <button onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition">
+        <div className="flex items-center gap-2">
+          <ChevronRight className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-90" : ""}`} />
+          <span className="text-sm font-medium">{title}</span>
+        </div>
+        <span className="text-xs text-green-600 font-medium">{status}</span>
+      </button>
+      {open && <div className="p-4 border-t">{children}</div>}
     </div>
   );
 }
