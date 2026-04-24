@@ -1,305 +1,459 @@
-"use client";
-
+﻿"use client";
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ChevronRight, Wand2, Tag, Layers, Database, CheckCircle2, AlertTriangle } from "lucide-react";
-import WorkbenchDialog from "@/components/knowledge/WorkbenchDialog";
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from "@/hooks/use-toast";
+import { trpc } from "@/lib/trpc";
+import { useProjectStore } from "@/stores/projectStore";
+import { Play, CheckCircle, Circle, Loader2, ChevronDown, ChevronRight, Scissors, Merge, Tag, Wand2, X, ChevronLeft } from "lucide-react";
 
-type Station = { id: string; name: string; icon: React.ReactNode; status: "done" | "active" | "pending" };
+/* ── 30 维度 ── */
+const DIMENSIONS = [
+  "品牌定位","品牌故事","产品卖点","技术参数","工艺流程",
+  "原料溯源","价值主张","对标竞品","客户画像","场景痛点",
+  "服务承诺","售后保障","安装指导","维护保养","环保认证",
+  "行业标准","法规合规","价格策略","促销活动","渠道政策",
+  "培训体系","团队管理","绩效考核","客户案例","市场分析",
+  "竞争情报","供应链","质量控制","创新研发","合规声明",
+];
+
+const LAYERS = [
+  { id:"A", name:"A 认知层", color:"#6366f1" },
+  { id:"B", name:"B 技能层", color:"#06b6d4" },
+  { id:"C", name:"C 风格红线层", color:"#f97316" },
+  { id:"D", name:"D 系统合规层", color:"#8b5cf6" },
+];
+
+const SLOTS = [
+  { key:"S0", name:"系统人设", subs:["S0.1","S0.2","S0.3"] },
+  { key:"S1", name:"品牌认知", subs:["S1.1","S1.2","S1.3","S1.4"] },
+  { key:"S2", name:"行业知识", subs:["S2.1","S2.2","S2.3"] },
+  { key:"S3", name:"输入预检", subs:["S3.1","S3.2"] },
+  { key:"S4", name:"用户理解", subs:["S4.1","S4.2"] },
+  { key:"S5", name:"主执行引擎", subs:["S5.1","S5.2","S5.3"] },
+  { key:"S6", name:"路由判断", subs:["S6.1","S6.2"] },
+  { key:"S7", name:"输出格式", subs:["S7.1","S7.2"] },
+  { key:"S8", name:"对抗验证", subs:["S8.1","S8.2","S8.3"] },
+  { key:"S9", name:"质量报告", subs:["S9.1","S9.2"] },
+  { key:"S10", name:"兜底策略", subs:["S10.1","S10.2"] },
+];
+
+const EXP_SOURCES = [
+  { id:"E1", label:"E1 官方", color:"bg-green-100 text-green-700" },
+  { id:"E2", label:"E2 实战", color:"bg-blue-100 text-blue-700" },
+  { id:"E3", label:"E3 通用", color:"bg-purple-100 text-purple-700" },
+];
+
+type Chunk = {
+  id: number;
+  title: string;
+  content: string;
+  wordCount: number;
+  status: "ok" | "warning" | "error";
+  dimTags: number[];
+  layer: string;
+  slotMappings: string[];
+  expSource: string;
+};
+
+/* ── 6 站流程 ── */
+const STATIONS = [
+  { id: 1, name: "文档解析" },
+  { id: 2, name: "智能切块" },
+  { id: 3, name: "分类打标" },
+  { id: 4, name: "QA 生成" },
+  { id: 5, name: "质量检查" },
+  { id: 6, name: "入库确认" },
+];
 
 export default function WorkbenchPage() {
-  const [activeTrack, setActiveTrack] = useState<"A" | "B">("A");
-  const [activeStation, setActiveStation] = useState(1);
-  const [showProcessDialog, setShowProcessDialog] = useState(false);
   const { toast } = useToast();
-  const [projectId, setProjectId] = useState('');
-  const [selectedRawId, setSelectedRawId] = useState('');
+  const { projectId } = useProjectStore();
 
-  // 获取用户&项目
-  const { data: userData } = trpc.user.getCurrent.useQuery();
-  const { data: projectsData } = trpc.project.list.useQuery(
-    { workspaceId: userData?.workspaces?.[0]?.workspaceId || '' },
-    { enabled: !!userData }
-  );
-  const currentProject = projectsData?.items?.[0];
+  /* ── 状态 ── */
+  const [track, setTrack] = useState<"A" | "B">("A");
+  const [station, setStation] = useState(2);
+  const [selectedChunk, setSelectedChunk] = useState(0);
+  const [markdownPreview] = useState(`# 品牌话术手册
 
-  // 获取已转换的素材列表（可生成 QA 的）
-  const { data: rawData } = trpc.raw.getAll.useQuery(
-    { projectId, limit: 100 },
-    { enabled: !!projectId }
-  );
-  const convertedRaws = rawData?.items?.filter(r => r.conversionStatus === 'CONVERTED') || [];
+## 1. 品牌故事
+万华灵荃始终坚持以「无醛添加」为核心理念，依托万华化学集团在MDI领域30+年的技术积累，打造从原材料到成品的全链路品质保障。
 
-  // Track A：生产线触发
-  const trackAMutation = trpc.pipeline.processRaw.useMutation({
-    onSuccess: (d) => toast({ title: `Track A 完成，生成 ${d.atomsCreated} 个原子块` }),
-    onError: (e) => toast({ title: 'Track A 失败', description: e.message, variant: 'destructive' }),
-  });
+## 2. 核心卖点
+- 无醛添加：采用万华自研MDI生态胶粘剂
+- MDI胶粘技术：区别于传统脲醛胶的革命性技术
+- 国家专利：已获得12项发明专利
 
-  // Track B：QA 生成触发
-  const trackBMutation = trpc.pipeline.generateQA.useMutation({
-    onSuccess: (d) => toast({ title: `Track B 完成，生成 ${d.qaPairsCreated} 组 QA 对` }),
-    onError: (e) => toast({ title: 'Track B 失败', description: e.message, variant: 'destructive' }),
-  });
+## 3. 常见异议处理
+Q: 价格贵怎么回应？
+A: 从每平米成本来算，灵荃的价格仅比普通板材贵15%，但环保等级高出3个级别...
 
-  // 批量向量化
-  const vectorMutation = trpc.vector.indexProject.useMutation({
-    onSuccess: (d) => toast({ title: `向量化完成，索引 ${d.indexed} 个原子块` }),
-    onError: (e) => toast({ title: '向量化失败', description: e.message, variant: 'destructive' }),
-  });
+## 4. 竞品对比
+- 欧派：传统脲醛胶，E1级
+- 索菲亚：部分产品无醛，非全链路
+- 灵荃：全链路无醛添加，ENF级`);
 
-  const trackAStations: Station[] = [
-    { id: "1", name: "格式归一", icon: <CheckCircle2 className="h-4 w-4" />, status: "done" },
-    { id: "2", name: "智能切块", icon: <Wand2 className="h-4 w-4" />, status: "active" },
-    { id: "3", name: "分类打标", icon: <Tag className="h-4 w-4" />, status: "pending" },
-    { id: "4", name: "粒度分级", icon: <Layers className="h-4 w-4" />, status: "pending" },
-    { id: "5", name: "元数据补齐", icon: <Database className="h-4 w-4" />, status: "pending" },
-    { id: "6", name: "质检入库", icon: <CheckCircle2 className="h-4 w-4" />, status: "pending" },
-  ];
+  /* ── Mock chunks ── */
+  const [chunks, setChunks] = useState<Chunk[]>([
+    { id:1, title:"品牌故事段落", content:"万华灵荃始终坚持以「无醛添加」为核心理念，依托万华化学集团在MDI领域30+年的技术积累，打造从原材料到成品的全链路品质保障。品牌自2018年创立以来，已在全国200+城市建立服务网点。", wordCount:326, status:"ok", dimTags:[1,2,7], layer:"A", slotMappings:["S1.1","S1.2"], expSource:"E1" },
+    { id:2, title:"核心卖点-无醛添加", content:"无醛添加是灵荃的核心竞争力。采用万华化学自主研发的MDI生态胶粘剂，从基材到饰面全程无醛添加，甲醛释放量≤0.025mg/m³，远低于国标E1级（≤0.124mg/m³），达到ENF级最高标准。", wordCount:512, status:"ok", dimTags:[3,4,6], layer:"B", slotMappings:["S2.3"], expSource:"E1" },
+    { id:3, title:"核心卖点-MDI胶粘技术", content:"MDI即二苯基甲烷二异氰酸酯，是一种反应型胶粘剂。与传统脲醛胶不同，MDI固化后不释放甲醛。万华化学是全球最大的MDI生产商，拥有完全自主知识产权。已获得12项发明专利、6项实用新型专利。", wordCount:480, status:"ok", dimTags:[3,4], layer:"B", slotMappings:["S2.3"], expSource:"E1" },
+    { id:4, title:"价格异议处理", content:"客户说「太贵了」的标准应对：从每平米成本来算，灵荃的价格仅比普通板材贵15%左右，但环保等级高出3个级别。一套80㎡的衣柜，总价差仅2000-3000元，但换来的是家人10年以上的健康呼吸环境。", wordCount:620, status:"warning", dimTags:[8,10,15], layer:"B", slotMappings:["S4.2","S5.2"], expSource:"E2" },
+    { id:5, title:"竞品对比-欧派", content:"与欧派对比的核心差异：技术底座不同（MDI vs 脲醛胶）、环保标准不同（ENF vs E1）、供应链透明度不同（全链路追溯 vs 部分公开）。注意不要贬低竞品，只客观比较技术指标。", wordCount:290, status:"ok", dimTags:[8,25,26], layer:"B", slotMappings:["S5.1","S5.2"], expSource:"E2" },
+  ]);
 
-  const trackBStations: Station[] = [
-    { id: "1", name: "材料类型识别", icon: <Tag className="h-4 w-4" />, status: "active" },
-    { id: "2", name: "P.A.O. 策略分析", icon: <Wand2 className="h-4 w-4" />, status: "pending" },
-    { id: "3", name: "知识点提炼", icon: <Layers className="h-4 w-4" />, status: "pending" },
-    { id: "4", name: "QA 对生成", icon: <Database className="h-4 w-4" />, status: "pending" },
-    { id: "5", name: "质检溯源", icon: <AlertTriangle className="h-4 w-4" />, status: "pending" },
-    { id: "6", name: "向量化入库", icon: <CheckCircle2 className="h-4 w-4" />, status: "pending" },
-  ];
+  /* ── 质检结果 ── */
+  const qcResults = {
+    danglingRef: 0,
+    crossDep: 0,
+    tooLarge: chunks.filter(c => c.wordCount > 600).length,
+    tooSmall: chunks.filter(c => c.wordCount < 100).length,
+  };
 
-  const stations = activeTrack === "A" ? trackAStations : trackBStations;
+  const currentChunk = chunks[selectedChunk];
 
-  const currentStation = stations[activeStation - 1]?.name || "";
+  const stationIcon = (s: number) => {
+    if (s < station) return <CheckCircle className="h-4 w-4 text-green-500" />;
+    if (s === station) return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
+    return <Circle className="h-4 w-4 text-gray-300" />;
+  };
 
   return (
-    <div>
-      <PageHeader title="知识加工工作台" description="双轨生产线控制台 — Track A 原子化 / Track B QA 对生产" />
-
-      <div className="mb-4 flex gap-2">
-        <button onClick={() => setActiveTrack("A")} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeTrack === "A" ? "bg-blue-600 text-white" : "border bg-white"}`}>Track A · 原子化加工</button>
-        <button onClick={() => setActiveTrack("B")} className={`rounded-lg px-4 py-2 text-sm font-medium ${activeTrack === "B" ? "bg-purple-600 text-white" : "border bg-white"}`}>Track B · QA 对生产</button>
-      </div>
-
-      <div className="mb-6 flex items-center gap-1">
-        {stations.map((s, i) => (
-          <div key={s.id} className="flex items-center">
-            <button onClick={() => setActiveStation(i + 1)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                s.status === "done" ? "bg-green-50 text-green-700" : s.status === "active" ? "bg-brand/10 text-brand ring-1 ring-brand" : "bg-gray-50 text-gray-400"
-              }`}>
-              {s.icon}<span>{s.name}</span>
-            </button>
-            {i < stations.length - 1 && <ChevronRight className="h-4 w-4 text-gray-300 mx-1" />}
+    <div className="flex flex-col h-full">
+      {/* 顶部信息 */}
+      <div className="px-6 py-3 border-b bg-white flex items-center gap-4">
+        <Button variant="ghost" size="sm" onClick={() => window.history.back()}><ChevronLeft className="h-4 w-4" /></Button>
+        <div>
+          <h1 className="text-base font-bold">📄 品牌话术手册.pdf</h1>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <StatusBadge status="CONVERTED" />
+            <span>材料类型: 话术库</span>
+            <span>经验源: E1</span>
           </div>
-        ))}
+        </div>
+        <div className="ml-auto flex gap-2">
+          <Button variant={track==="A" ? "default" : "outline"} size="sm" onClick={() => setTrack("A")}
+            className={`text-xs ${track==="A" ? "bg-blue-600 text-white" : ""}`}>
+            Track A 原子化 ▶
+          </Button>
+          <Button variant={track==="B" ? "default" : "outline"} size="sm" onClick={() => setTrack("B")}
+            className={`text-xs ${track==="B" ? "bg-purple-600 text-white" : ""}`}>
+            Track B QA对 ▶
+          </Button>
+          <Button size="sm" className="text-xs bg-brand text-white">
+            双轨并行 ▶▶
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
-        <div className="rounded-xl border bg-white p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Markdown 全文预览</h3>
-          <div className="h-96 overflow-y-auto rounded-lg bg-gray-50 p-4 font-mono text-xs leading-relaxed text-gray-600">
-            <p>## 产品知识文档</p><p>\n本文档介绍了产品的核心功能与技术架构...</p>
-            <p>\n### 1. 系统概述</p><p>原子化知识库平台是一个...</p>
+      {/* 进度条 */}
+      <div className="px-6 py-2 border-b bg-gray-50/50">
+        <div className="flex items-center gap-1">
+          {STATIONS.map((s, i) => (
+            <div key={s.id} className="flex items-center">
+              <button onClick={() => setStation(s.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition ${
+                  station === s.id ? "bg-white shadow-sm border font-medium text-blue-700" :
+                  s.id < station ? "text-green-600" : "text-gray-400"
+                }`}>
+                {stationIcon(s.id)}
+                <span>站{s.id} {s.name}</span>
+              </button>
+              {i < STATIONS.length - 1 && <span className="text-gray-300 mx-1">→</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 主区域 */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* ══════ 左侧：Markdown 预览 ══════ */}
+        <div className="w-[380px] flex-shrink-0 border-r overflow-auto">
+          <div className="px-4 py-2 bg-gray-50 border-b text-xs font-semibold text-gray-600">
+            Markdown 预览
+          </div>
+          <div className="p-4">
+            <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
+              {markdownPreview}
+            </pre>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-white p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">站 {activeStation} · {currentStation} 控制面板</h3>
-          {activeTrack === "A" && activeStation === 2 && <ChunkingPanel onProcess={() => setShowProcessDialog(true)} />}
-          {activeTrack === "A" && activeStation === 3 && <TaggingPanel onProcess={() => setShowProcessDialog(true)} />}
-          {activeTrack === "B" && activeStation === 4 && <QAGenerationPanel onProcess={() => setShowProcessDialog(true)} />}
-          {![2, 3, 4].includes(activeStation) && (
-            <div className="space-y-3">
-              <button
-                className="w-full rounded-lg bg-brand py-2 text-sm text-white hover:bg-brand-dark"
-                onClick={() => setShowProcessDialog(true)}
-              >
-                开始处理
-              </button>
-              <div className="text-sm text-gray-400 py-8 text-center">此站功能面板加载中…</div>
+        {/* ══════ 右侧：加工控制面板 ══════ */}
+        <div className="flex-1 overflow-auto">
+          {/* Track A · 站2 智能切块 */}
+          {track === "A" && station === 2 && (
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold">Track A · 站② 智能切块</h2>
+                <div className="flex gap-2">
+                  <Button size="sm" className="gap-1 text-xs bg-blue-600 text-white"
+                    onClick={() => toast({ title: "切块完成", description: `已切 ${chunks.length} 块` })}>
+                    <Wand2 className="h-3.5 w-3.5" /> 一键切块
+                  </Button>
+                  <span className="text-xs text-gray-500 leading-8">已切: {chunks.length} 块</span>
+                </div>
+              </div>
+
+              {/* Chunk 列表 */}
+              <div className="space-y-2">
+                {chunks.map((chunk, i) => (
+                  <div key={chunk.id}
+                    onClick={() => setSelectedChunk(i)}
+                    className={`border rounded-xl p-4 cursor-pointer transition ${
+                      selectedChunk === i ? "border-blue-400 bg-blue-50/30 shadow-sm" : "hover:bg-gray-50"
+                    }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Chunk #{chunk.id} — {chunk.title}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                        chunk.status === "ok" ? "bg-green-50 text-green-700" :
+                        chunk.status === "warning" ? "bg-yellow-50 text-yellow-700" :
+                        "bg-red-50 text-red-700"
+                      }`}>
+                        {chunk.status === "ok" ? "✅ 正常" : chunk.status === "warning" ? "⚠️ 偏大" : "❌ 异常"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 line-clamp-2 mb-2">「{chunk.content.slice(0, 80)}…」</p>
+                    <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                      <span>📏 {chunk.wordCount}字</span>
+                      <div className="flex gap-1">
+                        <button className="px-1.5 py-0.5 rounded border hover:bg-gray-100">合并↕</button>
+                        <button className="px-1.5 py-0.5 rounded border hover:bg-gray-100">拆分↔</button>
+                        <button className="px-1.5 py-0.5 rounded border hover:bg-gray-100">调整✂️</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 质检面板 */}
+              <div className="border rounded-xl p-4 bg-gray-50/50">
+                <h3 className="text-xs font-semibold text-gray-600 mb-2">质检面板</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                  <div className={qcResults.danglingRef === 0 ? "text-green-600" : "text-red-600"}>
+                    {qcResults.danglingRef === 0 ? "✅" : "❌"} 悬空指代: {qcResults.danglingRef}
+                  </div>
+                  <div className={qcResults.crossDep === 0 ? "text-green-600" : "text-red-600"}>
+                    {qcResults.crossDep === 0 ? "✅" : "❌"} 跨块依赖: {qcResults.crossDep}
+                  </div>
+                  <div className={qcResults.tooLarge === 0 ? "text-green-600" : "text-yellow-600"}>
+                    {qcResults.tooLarge === 0 ? "✅" : "⚠️"} 过大块: {qcResults.tooLarge}
+                  </div>
+                  <div className={qcResults.tooSmall === 0 ? "text-green-600" : "text-yellow-600"}>
+                    {qcResults.tooSmall === 0 ? "✅" : "⚠️"} 过小块: {qcResults.tooSmall}
+                  </div>
+                </div>
+              </div>
+
+              <Button onClick={() => setStation(3)} className="w-full bg-brand text-white text-sm">
+                确认切块，进入站③ ▶
+              </Button>
+            </div>
+          )}
+
+          {/* Track A · 站3 分类打标 */}
+          {track === "A" && station === 3 && currentChunk && (
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold">站③ 分类打标 — Chunk #{currentChunk.id}: {currentChunk.title}</h2>
+                <div className="flex gap-2 text-xs">
+                  <Button variant="outline" size="sm" disabled={selectedChunk <= 0}
+                    onClick={() => setSelectedChunk(i => i - 1)}>◀ 上一块</Button>
+                  <Button variant="outline" size="sm" disabled={selectedChunk >= chunks.length - 1}
+                    onClick={() => setSelectedChunk(i => i + 1)}>下一块 ▶</Button>
+                </div>
+              </div>
+
+              {/* 维度编号（多选） */}
+              <div className="border rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold text-gray-600">维度编号（多选）</h3>
+                  <span className="text-[10px] text-blue-500">💡 LLM推荐: {currentChunk.dimTags.join(",")} (灰色预填)</span>
+                </div>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {DIMENSIONS.map((dim, i) => {
+                    const isSelected = currentChunk.dimTags.includes(i + 1);
+                    return (
+                      <label key={i} className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] cursor-pointer transition ${
+                        isSelected ? "bg-blue-50 text-blue-700 font-medium" : "hover:bg-gray-50 text-gray-600"
+                      }`}>
+                        <input type="checkbox" checked={isSelected} readOnly className="w-3 h-3 rounded" />
+                        <span>{i+1}.{dim}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 投喂层级 */}
+              <div className="border rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold text-gray-600">投喂层级</h3>
+                  <span className="text-[10px] text-blue-500">💡 LLM推荐: {currentChunk.layer}</span>
+                </div>
+                <div className="flex gap-3">
+                  {LAYERS.map(l => (
+                    <label key={l.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition ${
+                      currentChunk.layer === l.id ? "border-2 shadow-sm" : "hover:bg-gray-50"
+                    }`} style={currentChunk.layer === l.id ? { borderColor: l.color } : {}}>
+                      <input type="radio" name="layer" checked={currentChunk.layer === l.id} readOnly />
+                      <span className="w-5 h-5 rounded text-white text-[10px] font-bold flex items-center justify-center" style= backgroundColor: l.color >{l.id}</span>
+                      <span className="text-xs">{l.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* 槽位映射 */}
+              <div className="border rounded-xl p-4">
+                <h3 className="text-xs font-semibold text-gray-600 mb-2">槽位映射（树形多选）</h3>
+                <div className="space-y-1 max-h-[200px] overflow-auto">
+                  {SLOTS.map(slot => (
+                    <details key={slot.key} className="group">
+                      <summary className="flex items-center gap-2 px-2 py-1 text-xs cursor-pointer hover:bg-gray-50 rounded">
+                        <ChevronRight className="h-3 w-3 text-gray-400 group-open:rotate-90 transition-transform" />
+                        <span className="font-mono text-blue-600">{slot.key}</span>
+                        <span>{slot.name}</span>
+                      </summary>
+                      <div className="pl-7 space-y-0.5">
+                        {slot.subs.map(sub => {
+                          const isChecked = currentChunk.slotMappings.includes(sub);
+                          return (
+                            <label key={sub} className={`flex items-center gap-1.5 px-2 py-0.5 text-[10px] rounded cursor-pointer ${
+                              isChecked ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-50"
+                            }`}>
+                              <input type="checkbox" checked={isChecked} readOnly className="w-3 h-3 rounded" />
+                              {sub}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </div>
+
+              {/* 经验源 + 场景 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="border rounded-xl p-4">
+                  <h3 className="text-xs font-semibold text-gray-600 mb-2">经验源</h3>
+                  <div className="flex gap-2">
+                    {EXP_SOURCES.map(e => (
+                      <label key={e.id} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs cursor-pointer border ${
+                        currentChunk.expSource === e.id ? e.color + " border-current font-medium" : "text-gray-500 hover:bg-gray-50"
+                      }`}>
+                        <input type="radio" name="exp" checked={currentChunk.expSource === e.id} readOnly className="w-3 h-3" />
+                        {e.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="border rounded-xl p-4">
+                  <h3 className="text-xs font-semibold text-gray-600 mb-2">适用场景</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["家居建材","无醛体系","销售岗","客服岗","小红书","抖音"].map((s, i) => (
+                      <label key={s} className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer border ${
+                        i < 3 ? "bg-blue-50 text-blue-700 border-blue-200" : "text-gray-400 hover:bg-gray-50"
+                      }`}>
+                        <input type="checkbox" checked={i < 3} readOnly className="w-2.5 h-2.5 mr-1" />
+                        {s}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="text-xs">批量应用到同类块</Button>
+                <Button onClick={() => setStation(4)} className="flex-1 bg-brand text-white text-sm">
+                  确认，进入站④ ▶
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Track B · 站4 QA 生成 */}
+          {((track === "B") || (track === "A" && station === 4)) && (
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold">Track B · 站④ 多角度 QA 对生成</h2>
+                <span className="text-xs text-gray-500">进度: ████████████░░░░░░░░ 60% (18/30 组)</span>
+              </div>
+
+              {/* 生成进度条 */}
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div className="h-full bg-blue-500 rounded-full transition-all" style= width: "60%"  />
+              </div>
+
+              {/* QA 表格 */}
+              <div className="border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr className="text-left text-xs text-gray-500">
+                      <th className="px-4 py-2 w-12">序号</th>
+                      <th className="px-4 py-2">Question</th>
+                      <th className="px-4 py-2">Answer (摘要)</th>
+                      <th className="px-4 py-2 w-16">Tags</th>
+                      <th className="px-4 py-2 w-12">难度</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {[
+                      { q:"万华灵荃的品牌核心理念是什么？", layers:["核心回答(85字)","深层解析(120字)","数据论证(95字)","场景应用(110字)","常见误区(80字)","应对话术(130字)","延伸知识(90字)"], total:710, tags:"品牌,故事", diff:"⭐" },
+                      { q:"MDI胶粘技术与传统胶有何区别？", layers:["核心回答(92字)","深层解析(150字)","数据论证(110字)","场景应用(95字)","常见误区(85字)","应对话术(140字)","延伸知识(100字)"], total:772, tags:"技术,卖点", diff:"⭐⭐" },
+                      { q:"客户说「太贵了」怎么回应？", layers:["核心回答(100字)","深层解析(130字)","数据论证(120字)","场景应用(150字)","常见误区(90字)","应对话术(160字)","延伸知识(80字)"], total:830, tags:"异议,话术", diff:"⭐⭐⭐" },
+                    ].map((qa, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-xs font-mono text-gray-400">Q{String(i+1).padStart(2,"0")}</td>
+                        <td className="px-4 py-3 text-xs font-medium">{qa.q}</td>
+                        <td className="px-4 py-3">
+                          <div className="space-y-0.5">
+                            {qa.layers.map((l, j) => (
+                              <div key={j} className="text-[10px] text-gray-500">▸ {l}</div>
+                            ))}
+                            <div className="text-[10px] text-green-600 font-medium mt-1">📏 总计: {qa.total}字 ✅</div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-[10px]">{qa.tags}</td>
+                        <td className="px-4 py-3 text-xs">{qa.diff}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="text-xs">⏸ 暂停生成</Button>
+                <Button variant="outline" size="sm" className="text-xs">🔄 重新生成选中</Button>
+                <Button onClick={() => setStation(5)} className="flex-1 bg-brand text-white text-sm">
+                  确认，进入站⑤质检 ▶
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* 站5/6 占位 */}
+          {track === "A" && (station === 5 || station === 6) && (
+            <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+              站{station} {STATIONS[station-1].name} — 实现中…
+            </div>
+          )}
+
+          {/* 站1 */}
+          {station === 1 && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center space-y-3">
+                <div className="text-4xl">📄</div>
+                <div className="text-sm text-gray-600">文档已解析完成</div>
+                <Button onClick={() => setStation(2)} className="bg-brand text-white">进入站② 智能切块 ▶</Button>
+              </div>
             </div>
           )}
         </div>
       </div>
-
-      {showProcessDialog && currentProject && (
-        <WorkbenchDialog
-          open={showProcessDialog}
-          onOpenChange={setShowProcessDialog}
-          projectId={currentProject.id}
-          rawId="sample-raw-id" // 实际应用中应从上下文获取
-          station={currentStation}
-          onComplete={() => setShowProcessDialog(false)}
-        />
-      )}
-
-      {/* ── 生产线控制台 ── */}
-      <div className="grid grid-cols-1 gap-6 mt-6">
-        {/* 项目选择 */}
-        <div className="border rounded-xl p-5 bg-white">
-          <h3 className="font-semibold mb-3">① 选择项目</h3>
-          <select
-            value={projectId}
-            onChange={e => setProjectId(e.target.value)}
-            className="border rounded-lg px-3 py-2 w-full text-sm"
-          >
-            <option value="">请选择项目</option>
-            {projectsData?.items?.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Track A：原子化生产线 */}
-        <div className="border rounded-xl p-5 bg-white">
-          <h3 className="font-semibold mb-1">② Track A — 原子化生产线</h3>
-          <p className="text-xs text-gray-500 mb-3">选择素材 → 格式归一 → 切块 → 自动打标 → 入库</p>
-          <select
-            value={selectedRawId}
-            onChange={e => setSelectedRawId(e.target.value)}
-            className="border rounded-lg px-3 py-2 w-full text-sm mb-3"
-          >
-            <option value="">选择已上传素材</option>
-            {rawData?.items?.map(r => (
-              <option key={r.id} value={r.id}>
-                [{r.conversionStatus}] {r.title}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => trackAMutation.mutate({ rawId: selectedRawId, projectId })}
-            disabled={!selectedRawId || !projectId || trackAMutation.isPending}
-            className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-40"
-          >
-            {trackAMutation.isPending ? '处理中…' : '▶ 启动 Track A（原子化）'}
-          </button>
-        </div>
-
-        {/* Track B：QA 对生成 */}
-        <div className="border rounded-xl p-5 bg-white">
-          <h3 className="font-semibold mb-1">③ Track B — QA 对生产线</h3>
-          <p className="text-xs text-gray-500 mb-3">仅已完成 Track A 的素材可生成 QA 对</p>
-          <select
-            className="border rounded-lg px-3 py-2 w-full text-sm mb-3"
-            onChange={e => setSelectedRawId(e.target.value)}
-            value={selectedRawId}
-          >
-            <option value="">选择已转换素材</option>
-            {convertedRaws.map(r => (
-              <option key={r.id} value={r.id}>{r.title}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => trackBMutation.mutate({ rawId: selectedRawId, projectId })}
-            disabled={!selectedRawId || !projectId || trackBMutation.isPending}
-            className="w-full py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
-          >
-            {trackBMutation.isPending ? '生成中…' : '▶ 启动 Track B（QA 对生成）'}
-          </button>
-        </div>
-
-        {/* 向量化 */}
-        <div className="border rounded-xl p-5 bg-white">
-          <h3 className="font-semibold mb-1">④ 向量化索引</h3>
-          <p className="text-xs text-gray-500 mb-3">将项目所有 active 原子块写入 Qdrant 向量库</p>
-          <button
-            onClick={() => vectorMutation.mutate({ projectId })}
-            disabled={!projectId || vectorMutation.isPending}
-            className="w-full py-2 bg-orange-500 text-white rounded-lg text-sm hover:bg-orange-600 disabled:opacity-40"
-          >
-            {vectorMutation.isPending ? '索引中…' : '▶ 批量向量化'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ChunkingPanel({ onProcess }: { onProcess: () => void }) {
-  return (
-    <div className="space-y-3">
-      <button className="w-full rounded-lg bg-brand py-2 text-sm text-white hover:bg-brand-dark" onClick={onProcess}>⚡ 一键智能切块</button>
-      <div className="space-y-2 max-h-64 overflow-y-auto">
-        {[1, 2, 3].map(i => (
-          <div key={i} className="rounded-lg border p-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-mono text-gray-400">块 #{i}</span>
-              <span className="text-xs text-gray-400">~320 字</span>
-            </div>
-            <p className="text-sm text-gray-600 line-clamp-2">这是第 {i} 个切块的内容预览文本…</p>
-            <div className="mt-2 flex gap-1">
-              <button className="rounded border px-2 py-0.5 text-xs hover:bg-gray-50">合并 ↕</button>
-              <button className="rounded border px-2 py-0.5 text-xs hover:bg-gray-50">拆分 ✂️</button>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="rounded-lg bg-yellow-50 p-2 text-xs text-yellow-700">⚠️ 检测到 1 处悬空指代，2 处跨块依赖</div>
-    </div>
-  );
-}
-
-function TaggingPanel({ onProcess }: { onProcess: () => void }) {
-  return (
-    <div className="space-y-3">
-      <p className="text-xs text-gray-500">为每个块配置 5 维标签（LLM 已自动推荐灰色预填）</p>
-      <div className="space-y-2">
-        <div>
-          <label className="text-xs font-medium">维度编号</label>
-          <div className="flex flex-wrap gap-1 mt-1">
-            {[1,2,3,7,16].map(d => <span key={d} className="rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-600">维度{d}</span>)}
-          </div>
-        </div>
-        <div>
-          <label className="text-xs font-medium">投喂层级</label>
-          <div className="flex gap-2 mt-1">
-            {["A","B","C","D"].map(l => <label key={l} className="flex items-center gap-1 text-xs"><input type="radio" name="layer" defaultChecked={l==="A"} />{l}</label>)}
-          </div>
-        </div>
-        <div>
-          <label className="text-xs font-medium">槽位映射</label>
-          <div className="flex flex-wrap gap-1 mt-1">
-            {["S1.1","S2.3","S4.2"].map(s => <span key={s} className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-mono text-indigo-600">{s}</span>)}
-          </div>
-        </div>
-        <div>
-          <label className="text-xs font-medium">经验源</label>
-          <select className="mt-1 rounded border px-2 py-1 text-xs">
-            <option>E1 企业经验</option>
-            <option>E2 行业经验</option>
-            <option>E3 跨行业</option>
-          </select>
-        </div>
-      </div>
-      <button className="w-full rounded-lg bg-green-600 py-2 text-sm text-white hover:bg-green-700" onClick={onProcess}>✅ 确认标签 → 下一站</button>
-    </div>
-  );
-}
-
-function QAGenerationPanel({ onProcess }: { onProcess: () => void }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium">QA 生成进度</span>
-        <span className="text-xs text-brand">12/20 对</span>
-      </div>
-      <div className="h-2 w-full rounded-full bg-gray-200">
-        <div className="h-2 rounded-full bg-brand" style={{ width: "60%" }} />
-      </div>
-      <div className="max-h-56 overflow-y-auto space-y-2">
-        {[1, 2, 3].map(i => (
-          <div key={i} className="rounded-lg border p-3">
-            <p className="text-xs font-semibold text-brand">Q{i}: 什么是原子化知识库的核心架构？</p>
-            <p className="mt-1 text-xs text-gray-600 line-clamp-3">A{i}: 原子化知识库的核心架构包含四库（Raw/Atoms/QA Pairs/Blueprint）和三路索引…</p>
-            <div className="mt-1 flex gap-1">
-              {["产品知识","架构"].map(t => <span key={t} className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{t}</span>)}
-            </div>
-          </div>
-        ))}
-      </div>
-      <button className="w-full rounded-lg bg-green-600 py-2 text-sm text-white hover:bg-green-700" onClick={onProcess}>✅ 完成生成 → 下一站</button>
     </div>
   );
 }

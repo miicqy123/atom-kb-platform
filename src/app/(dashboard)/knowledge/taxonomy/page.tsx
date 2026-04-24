@@ -1,118 +1,140 @@
-"use client";
-
+﻿"use client";
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { LayerBadge } from "@/components/ui/LayerBadge";
-import { ChevronRight, ChevronDown, Plus, Tag, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import TagDialog from "@/components/knowledge/TagDialog";
-import DimensionDialog from "@/components/knowledge/DimensionDialog";
+import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/hooks/use-toast";
+import { ChevronRight, Plus, Edit, Archive, FolderTree, Tags } from "lucide-react";
 
-const LAYERS = [{ key: "A", name: "A 认知层", range: "1-5" }, { key: "B", name: "B 技能层", range: "6-15" }, { key: "C", name: "C 风格红线层", range: "16-20" }, { key: "D", name: "D 系统合规层", range: "21-30" }];
-const SLOTS = ["S0","S1","S2","S3","S4","S5","S6","S7","S8","S9","S10"];
+/* ── 树形数据 ── */
+const LAYERS = [
+  { id:"A", name:"A 认知层", color:"#6366f1", icon:"🅰️" },
+  { id:"B", name:"B 技能层", color:"#06b6d4", icon:"🅱️" },
+  { id:"C", name:"C 风格红线层", color:"#f97316", icon:"🅲" },
+  { id:"D", name:"D 系统合规层", color:"#8b5cf6", icon:"🅳" },
+];
+
+type TreeNode = {
+  id: string;
+  name: string;
+  atomCount: number;
+  children?: TreeNode[];
+};
+
+const TREE_DATA: Record<string, TreeNode[]> = {
+  A: [
+    { id:"d1", name:"维度1 品牌定位", atomCount:0, children:[
+      { id:"s0.1", name:"S0.1 角色定义", atomCount:12 },
+      { id:"s1.2", name:"S1.2 核心价值", atomCount:8 },
+    ]},
+    { id:"d2", name:"维度2 品牌故事", atomCount:0, children:[
+      { id:"s1.1", name:"S1.1 品牌故事", atomCount:23 },
+      { id:"s1.3", name:"S1.3 创始故事", atomCount:5 },
+    ]},
+    { id:"d3", name:"维度3 产品卖点", atomCount:0, children:[
+      { id:"s2.3a", name:"S2.3 技术标准", atomCount:18 },
+    ]},
+    { id:"d4", name:"维度4 技术参数", atomCount:0, children:[
+      { id:"s2.3b", name:"S2.3 技术标准", atomCount:6 },
+    ]},
+    { id:"d5", name:"维度5 工艺流程", atomCount:0, children:[{ id:"s2.1", name:"S2.1 行业概况", atomCount:3 }] },
+    { id:"d6", name:"维度6 原料溯源", atomCount:0, children:[{ id:"s2.2", name:"S2.2 市场趋势", atomCount:8 }] },
+    { id:"d7", name:"维度7 价值主张", atomCount:0, children:[
+      { id:"s1.2b", name:"S1.2 核心价值", atomCount:15 },
+    ]},
+  ],
+  B: [
+    { id:"bd8", name:"维度8 对标竞品", atomCount:0, children:[
+      { id:"bs5.1", name:"S5.1 内容生成", atomCount:18 },
+    ]},
+    { id:"bd10", name:"维度10 场景痛点", atomCount:0, children:[
+      { id:"bs4.2", name:"S4.2 需求分析", atomCount:20 },
+    ]},
+  ],
+  C: [
+    { id:"cd28", name:"维度28 质量控制", atomCount:0, children:[
+      { id:"cs8.1", name:"S8.1 红线扫描", atomCount:8 },
+    ]},
+  ],
+  D: [
+    { id:"dd30", name:"维度30 合规声明", atomCount:0, children:[
+      { id:"ds10.1", name:"S10.1 降级回复", atomCount:12 },
+    ]},
+  ],
+};
+
+const SCENE_TAGS = {
+  岗位: ["销售岗","客服岗","运营岗","技术支持","培训讲师","市场推广","管理层","新媒体运营","直播主播","社群运营","投手","BD"],
+  平台: ["小红书","抖音","微信","快手","淘宝","京东","官网","线下"],
+  受众: ["宝妈","年轻白领","中老年","装修业主","设计师","经销商","工程客户","高端客户"],
+  业务线: ["零售","工程","加盟","电商","定制","批发"],
+};
 
 export default function TaxonomyPage() {
-  const [activeTab, setActiveTab] = useState<"tree" | "tags">("tree");
-  const [expandedLayers, setExpandedLayers] = useState<string[]>(["A"]);
-  const [selectedDim, setSelectedDim] = useState<number | null>(1);
-  const [showTagDialog, setShowTagDialog] = useState(false);
-  const [editingTag, setEditingTag] = useState<any>(null);
-  const [showDimDialog, setShowDimDialog] = useState(false);
-  const [editingDim, setEditingDim] = useState<any>(null);
-
   const { toast } = useToast();
-  const utils = trpc.useUtils();
+  const [mainTab, setMainTab] = useState<"tree" | "scene">("tree");
+  const [expandedLayers, setExpandedLayers] = useState<string[]>(["A"]);
+  const [expandedDims, setExpandedDims] = useState<string[]>(["d2"]);
+  const [selectedNode, setSelectedNode] = useState<{ path: string; name: string; atomCount: number } | null>(
+    { path: "A > 维度2 品牌故事 > S1.1", name: "S1.1 品牌故事", atomCount: 23 }
+  );
 
-  const { data: dimensions } = trpc.taxonomy.dimensions.useQuery({});
-  const { data: scenarioTags } = trpc.taxonomy.scenarioTags.useQuery({});
-
-  const deleteTagMutation = trpc.taxonomy.deleteTag.useMutation({
-    onSuccess: () => {
-      toast({
-        title: "删除成功",
-        description: "标签已成功删除",
-      });
-      utils.taxonomy.scenarioTags.invalidate(); // 使缓存失效
-    },
-    onError: (error) => {
-      toast({
-        title: "删除失败",
-        description: error.message || "删除标签时出现错误",
-        variant: "destructive",
-      });
-    }
-  });
-
-  const deleteDimensionMutation = trpc.taxonomy.deleteDimension.useMutation({
-    onSuccess: () => {
-      toast({
-        title: "删除成功",
-        description: "维度已成功删除",
-      });
-      utils.taxonomy.dimensions.invalidate(); // 使缓存失效
-    },
-    onError: (error) => {
-      toast({
-        title: "删除失败",
-        description: error.message || "删除维度时出现错误",
-        variant: "destructive",
-      });
-    }
-  });
-
-  const toggleLayer = (key: string) => setExpandedLayers(prev => prev.includes(key) ? prev.filter(l => l !== key) : [...prev, key]);
+  const toggleLayer = (id: string) => setExpandedLayers(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  const toggleDim = (id: string) => setExpandedDims(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
   return (
-    <div>
-      <PageHeader title="分类树与标签管理" description="管理 30 维度 × ABCD 层级 × S0-S10 槽位 × 场景标签" />
+    <div className="flex flex-col h-full">
+      <PageHeader title="分类树与标签管理" description="管理知识分类体系和场景标签" />
 
-      <div className="mb-4 flex gap-2">
-        <button onClick={() => setActiveTab("tree")} className={`rounded-lg px-4 py-2 text-sm ${activeTab === "tree" ? "bg-brand text-white" : "border"}`}>分类树</button>
-        <button onClick={() => setActiveTab("tags")} className={`rounded-lg px-4 py-2 text-sm ${activeTab === "tags" ? "bg-brand text-white" : "border"}`}>场景标签</button>
+      {/* Tab */}
+      <div className="border-b px-6">
+        <div className="flex gap-6">
+          <button onClick={() => setMainTab("tree")}
+            className={`py-3 text-sm font-medium border-b-2 transition flex items-center gap-1.5 ${
+              mainTab === "tree" ? "border-brand text-brand" : "border-transparent text-gray-500"
+            }`}>
+            <FolderTree className="h-4 w-4" /> 分类树
+          </button>
+          <button onClick={() => setMainTab("scene")}
+            className={`py-3 text-sm font-medium border-b-2 transition flex items-center gap-1.5 ${
+              mainTab === "scene" ? "border-brand text-brand" : "border-transparent text-gray-500"
+            }`}>
+            <Tags className="h-4 w-4" /> 场景标签
+          </button>
+        </div>
       </div>
 
-      {activeTab === "tree" && (
-        <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-1 rounded-xl border bg-white p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">层级 → 维度 → 槽位</h3>
-              <Button size="sm" variant="outline" onClick={() => setShowDimDialog(true)}>
-                <Plus className="h-3 w-3 mr-1" />
-                新建
-              </Button>
-            </div>
-            <div className="space-y-1">
+      {mainTab === "tree" && (
+        <div className="flex flex-1 overflow-hidden">
+          {/* ── 左侧：树形导航 ── */}
+          <div className="w-72 border-r overflow-auto bg-gray-50/30">
+            <div className="p-3">
               {LAYERS.map(layer => (
-                <div key={layer.key}>
-                  <button onClick={() => toggleLayer(layer.key)} className="flex items-center gap-2 w-full rounded-lg px-2 py-1.5 text-sm hover:bg-gray-50">
-                    {expandedLayers.includes(layer.key) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    <LayerBadge layer={layer.key} />
-                    <span className="text-gray-500 text-xs">维度 {layer.range}</span>
+                <div key={layer.id}>
+                  <button onClick={() => toggleLayer(layer.id)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg hover:bg-white transition">
+                    <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${expandedLayers.includes(layer.id) ? "rotate-90" : ""}`} />
+                    <span style= color: layer.color >{layer.icon} {layer.name}</span>
                   </button>
-                  {expandedLayers.includes(layer.key) && (dimensions ?? []).filter((d: any) => d.layer === layer.key).map((dim: any) => (
-                    <div key={dim.number} className="ml-6 flex items-center justify-between">
-                      <button onClick={() => setSelectedDim(dim.number)}
-                        className={`flex items-center gap-2 w-full rounded-lg px-2 py-1 text-xs hover:bg-gray-50 ${selectedDim === dim.number ? "bg-blue-50 text-brand" : ""}`}>
-                        <span className="font-mono text-gray-400">D{dim.number}</span>
+
+                  {expandedLayers.includes(layer.id) && (TREE_DATA[layer.id] || []).map(dim => (
+                    <div key={dim.id} className="ml-4">
+                      <button onClick={() => toggleDim(dim.id)}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 rounded hover:bg-white">
+                        <ChevronRight className={`h-3 w-3 text-gray-400 transition-transform ${expandedDims.includes(dim.id) ? "rotate-90" : ""}`} />
                         {dim.name}
                       </button>
-                      <div className="flex gap-1">
-                        <Button size="xs" variant="ghost" onClick={() => {
-                          setEditingDim(dim);
-                          setShowDimDialog(true);
-                        }}>
-                          <Edit className="h-3 w-3" />
-                        </Button>
-                        <Button size="xs" variant="ghost" onClick={() => {
-                          if (window.confirm(`确定要删除维度 ${dim.number} (${dim.name}) 吗？此操作不可撤销。`)) {
-                            deleteDimensionMutation.mutate({ id: dim.id });
-                          }
-                        }} disabled={deleteDimensionMutation.isPending}>
-                          <Trash2 className="h-3 w-3 text-red-500" />
-                        </Button>
-                      </div>
+
+                      {expandedDims.includes(dim.id) && dim.children?.map(sub => (
+                        <button key={sub.id}
+                          onClick={() => setSelectedNode({ path: `${layer.id} > ${dim.name} > ${sub.name.split(" ")[0]}`, name: sub.name, atomCount: sub.atomCount })}
+                          className={`w-full flex items-center justify-between ml-8 px-3 py-1 text-xs rounded transition ${
+                            selectedNode?.name === sub.name ? "bg-white text-brand font-medium border-r-2 border-brand" : "text-gray-500 hover:bg-white"
+                          }`}>
+                          <span>● {sub.name}</span>
+                          <span className="text-[10px] text-gray-400">({sub.atomCount})</span>
+                        </button>
+                      ))}
                     </div>
                   ))}
                 </div>
@@ -120,105 +142,90 @@ export default function TaxonomyPage() {
             </div>
           </div>
 
-          <div className="col-span-2 rounded-xl border bg-white p-4">
-            <h3 className="text-sm font-semibold mb-3">维度 {selectedDim} 详情</h3>
-            {selectedDim && (
-              <div>
-                <p className="text-sm text-gray-600 mb-3">{dimensions?.find((d: any) => d.number === selectedDim)?.name}</p>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-lg bg-blue-50 p-3">
-                    <p className="text-xs text-gray-500">原子块数量</p>
-                    <p className="text-lg font-bold text-brand">—</p>
+          {/* ── 右侧：节点详情 ── */}
+          <div className="flex-1 overflow-auto p-6">
+            {selectedNode ? (
+              <div className="space-y-4">
+                <div className="text-xs text-gray-500">📍 当前选中: {selectedNode.path}</div>
+                <h2 className="text-lg font-bold">{selectedNode.name}</h2>
+
+                {/* 统计 */}
+                <div className="grid grid-cols-3 gap-4">
+                  {[
+                    { label: "原子块数量", value: selectedNode.atomCount, icon: "🧱" },
+                    { label: "QA 对数量", value: Math.floor(selectedNode.atomCount * 0.65), icon: "❓" },
+                    { label: "关联蓝图数", value: Math.floor(selectedNode.atomCount * 0.35), icon: "📋" },
+                  ].map(stat => (
+                    <div key={stat.label} className="border rounded-xl p-4 bg-white">
+                      <div className="text-xs text-gray-500">{stat.icon} {stat.label}</div>
+                      <div className="text-2xl font-bold mt-1">{stat.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 该节点下的原子块 */}
+                <div className="border rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b text-xs font-semibold text-gray-600">
+                    该节点下的原子块
                   </div>
-                  <div className="rounded-lg bg-purple-50 p-3">
-                    <p className="text-xs text-gray-500">QA 对数量</p>
-                    <p className="text-lg font-bold text-purple-600">—</p>
+                  <div className="divide-y">
+                    {[
+                      { name: "品牌故事-核心", status: "🟢", gran: "Atom" },
+                      { name: "品牌故事-创业历程", status: "🟢", gran: "Atom" },
+                      { name: "品牌理念话术包", status: "🟢", gran: "Pack" },
+                      { name: "品牌VI规范", status: "🟡", gran: "Atom" },
+                    ].slice(0, Math.min(4, selectedNode.atomCount)).map((atom, i) => (
+                      <div key={i} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span>{atom.status}</span>
+                          <span className="font-medium">{atom.name}</span>
+                          <Badge variant="outline" className="text-[10px]">{atom.gran}</Badge>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="rounded-lg bg-green-50 p-3">
-                    <p className="text-xs text-gray-500">关联蓝图</p>
-                    <p className="text-lg font-bold text-green-600">—</p>
+                  <div className="px-4 py-2 border-t">
+                    <button className="text-xs text-blue-600 hover:text-blue-800">查看完整列表 →</button>
                   </div>
                 </div>
-                <h4 className="text-xs font-semibold mt-4 mb-2">槽位映射</h4>
-                <div className="flex flex-wrap gap-1">
-                  {SLOTS.map(s => <span key={s} className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-mono text-indigo-600">{s}</span>)}
+
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="gap-1 text-xs"><Edit className="h-3.5 w-3.5" /> 编辑节点</Button>
+                  <Button variant="outline" size="sm" className="gap-1 text-xs"><Plus className="h-3.5 w-3.5" /> 新增子节点</Button>
+                  <Button variant="outline" size="sm" className="gap-1 text-xs text-gray-500"><Archive className="h-3.5 w-3.5" /> 归档</Button>
                 </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                ← 从左侧选择一个节点查看详情
               </div>
             )}
           </div>
         </div>
       )}
 
-      {activeTab === "tags" && (
-        <div className="grid grid-cols-2 gap-6">
-          {["position", "platform", "audience", "business_line"].map(type => (
-            <div key={type} className="rounded-xl border bg-white p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold capitalize">
-                  {type === "position" ? "岗位标签" :
-                   type === "platform" ? "平台标签" :
-                   type === "audience" ? "受众标签" : "业务线标签"}
-                </h3>
-                <button className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50" onClick={() => setShowTagDialog(true)}>
-                  <Plus className="inline h-3 w-3 mr-1" /> 新增
-                </button>
+      {mainTab === "scene" && (
+        <div className="flex-1 overflow-auto p-6 space-y-4">
+          {Object.entries(SCENE_TAGS).map(([category, tags]) => (
+            <div key={category} className="border rounded-xl overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+                <h3 className="text-sm font-semibold">{category}</h3>
+                <span className="text-xs text-gray-400">{tags.length} 个标签</span>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {(scenarioTags ?? []).filter((t: any) => t.type === type).map((tag: any) => (
-                  <div key={tag.id} className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs">
-                    <Tag className="h-3 w-3 text-gray-400" />
-                    {tag.name}
-                    <div className="flex gap-1 ml-1">
-                      <button
-                        className="text-gray-500 hover:text-gray-700"
-                        onClick={() => {
-                          setEditingTag(tag);
-                          setShowTagDialog(true);
-                        }}
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        className="text-red-500 hover:text-red-700"
-                        onClick={() => {
-                          if (window.confirm(`确定要删除标签 "${tag.name}" 吗？此操作不可撤销。`)) {
-                            deleteTagMutation.mutate({ id: tag.id });
-                          }
-                        }}
-                        disabled={deleteTagMutation.isPending}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
+              <div className="p-4 flex flex-wrap gap-2">
+                {tags.map(tag => (
+                  <span key={tag} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium group flex items-center gap-1 hover:bg-blue-100 cursor-pointer">
+                    {tag}
+                  </span>
                 ))}
-                {(scenarioTags ?? []).filter((t: any) => t.type === type).length === 0 &&
-                 <span className="text-xs text-gray-400">暂无标签</span>}
+                <button className="px-3 py-1.5 border border-dashed rounded-full text-xs text-gray-400 hover:text-gray-600 hover:border-gray-400">
+                  + 添加
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
-
-      <TagDialog
-        open={showTagDialog}
-        onOpenChange={setShowTagDialog}
-        tag={editingTag}
-        onComplete={() => {
-          setShowTagDialog(false);
-          setEditingTag(null);
-        }}
-      />
-
-      <DimensionDialog
-        open={showDimDialog}
-        onOpenChange={setShowDimDialog}
-        dimension={editingDim}
-        onComplete={() => {
-          setShowDimDialog(false);
-          setEditingDim(null);
-        }}
-      />
     </div>
   );
 }
