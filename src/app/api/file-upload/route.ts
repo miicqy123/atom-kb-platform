@@ -2,10 +2,34 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { PrismaClient } from '@prisma/client';
-import { promises as fs } from 'fs';
 import path from 'path';
 
 const prisma = new PrismaClient();
+
+// 动态导入 mammoth 仅在需要时使用
+async function extractWordText(buffer: ArrayBuffer) {
+  try {
+    const mammoth = await import('mammoth');
+    const result = await mammoth.default.extractRawText({ buffer: Buffer.from(buffer) });
+    return result.value;
+  } catch (error) {
+    console.error('Error extracting Word document:', error);
+    return Buffer.from(buffer).toString('utf-8');
+  }
+}
+
+// 动态导入 pdf-parse 仅在需要时使用
+async function extractPdfText(buffer: ArrayBuffer) {
+  try {
+    // 在服务器环境中使用 require
+    const pdfParse = (await import('pdf-parse')).default;
+    const pdfData = await pdfParse(Buffer.from(buffer));
+    return pdfData.text;
+  } catch (error) {
+    console.error('Error parsing PDF:', error);
+    return '';
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,27 +51,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
     }
 
-    // 创建上传目录
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-    await fs.mkdir(uploadsDir, { recursive: true });
-
-    // 生成唯一文件名
-    const timestamp = Date.now();
-    const originalName = file.name;
-    const fileExtension = path.extname(originalName);
-    const fileName = `${timestamp}_${originalName}`;
-    const filePath = path.join(uploadsDir, fileName);
-
-    // 读取文件内容并写入磁盘
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    await fs.writeFile(filePath, buffer);
-
     // 根据文件名推断格式
-    const fileExtensionUpper = fileExtension.toUpperCase().substring(1);
+    const fileExtension = path.extname(file.name).toUpperCase().substring(1);
     let format = 'PDF'; // 默认格式
 
-    switch (fileExtensionUpper) {
+    // 确定文件类型
+    switch (fileExtension) {
       case 'DOC':
       case 'DOCX':
         format = 'WORD';
@@ -64,22 +73,59 @@ export async function POST(req: NextRequest) {
       case 'MD':
         format = 'WORD'; // 简单处理
         break;
+      case 'PDF':
+        format = 'PDF';
+        break;
       default:
         format = 'PDF';
+    }
+
+    // 读取文件内容
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+
+    // 根据文件格式提取文本内容
+    let markdownContent = '';
+    let conversionStatus = 'PENDING'; // 默认为PENDING
+
+    try {
+      if (format === 'WORD') {
+        // 对于WORD格式，尝试使用mammoth提取文本
+        markdownContent = await extractWordText(bytes);
+        conversionStatus = 'CONVERTED'; // Word文档可以直接转换
+      } else if (format === 'PDF') {
+        // 对于PDF格式，使用pdf-parse提取文本
+        markdownContent = await extractPdfText(bytes);
+        conversionStatus = 'CONVERTED'; // PDF文档可以直接转换
+      } else if (['PPT', 'EXCEL'].includes(format)) {
+        // 对于PPT、EXCEL等非文本格式，标记为PENDING等待后续处理
+        markdownContent = '';
+        conversionStatus = 'PENDING';
+      } else {
+        // 对于纯文本格式，直接转换
+        markdownContent = buffer.toString('utf-8');
+        conversionStatus = 'CONVERTED';
+      }
+    } catch (error) {
+      console.error('Error processing file content:', error);
+      // 如果处理失败，仍然创建记录，但标记为失败
+      markdownContent = '';
+      conversionStatus = 'FAILED';
     }
 
     // 保存到数据库
     const newRaw = await prisma.raw.create({
       data: {
-        title: title || originalName.replace(/\.[^/.]+$/, ""),
+        title: title || file.name.replace(/\.[^/.]+$/, ""),
         projectId: projectId || 'test-project',
         format: format as any,
         materialType: materialType as any,
         experienceSource: 'E1_COMPANY',
-        originalFileName: originalName,
-        originalFileUrl: `/uploads/${fileName}`,
+        originalFileName: file.name, // 保留原始文件名
+        // 不再有 originalFileUrl 字段（不再存储在本地磁盘）
         fileSize: file.size,
-        conversionStatus: 'PENDING',
+        markdownContent: markdownContent || null, // 可能为空，使用null
+        conversionStatus: conversionStatus as any,
         verificationStatus: 'unverified',
         exposureLevel: 'INTERNAL',
       },

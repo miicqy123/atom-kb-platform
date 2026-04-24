@@ -13,7 +13,7 @@ interface UploadDialogProps {
   projectId?: string; // 如果有默认项目ID
 }
 
-export default function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
+export default function UploadDialog({ open, onOpenChange, projectId: propProjectId }: UploadDialogProps) {
   const [title, setTitle] = useState('');
   const [materialType, setMaterialType] = useState<'THEORY' | 'CASE_STUDY' | 'METHODOLOGY' | 'FAQ' | 'SCRIPT' | 'REGULATION' | 'PRODUCT_DOC' | 'TRAINING_MATERIAL' | 'MEETING_RECORD' | 'CUSTOMER_VOICE' | 'INDUSTRY_REPORT' | 'COMPETITOR_ANALYSIS' | 'INTERNAL_WIKI' | 'OTHER'>('THEORY');
   const [experienceSource, setExperienceSource] = useState<'E1_COMPANY' | 'E2_INDUSTRY' | 'E3_CROSS_INDUSTRY'>('E1_COMPANY');
@@ -22,7 +22,10 @@ export default function UploadDialog({ open, onOpenChange }: UploadDialogProps) 
   const [uploading, setUploading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const { projectId } = useProjectStore();
+  const { projectId: storeProjectId } = useProjectStore();
+
+  // 优先使用传入的projectId，如果没有则使用store中的projectId
+  const effectiveProjectId = propProjectId || storeProjectId;
 
   // 用于手动触发数据刷新
   const utils = trpc.useUtils();
@@ -48,13 +51,22 @@ export default function UploadDialog({ open, onOpenChange }: UploadDialogProps) 
       return;
     }
 
+    if (!effectiveProjectId) {
+      toast({
+        title: '错误',
+        description: '未选择项目',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setUploading(true);
 
     try {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('title', title);
-      formData.append('projectId', projectId);          // 从 useProjectStore 获取
+      formData.append('projectId', effectiveProjectId);          // 使用确定的项目ID
       formData.append('materialType', materialType);     // 来自表单选择
       formData.append('experienceSource', experienceSource); // 来自表单选择
 
