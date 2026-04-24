@@ -1,519 +1,308 @@
-"use client";
-import { useState, useEffect } from 'react';
+﻿"use client";
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Upload, FileText, Database, Settings, Search, Eye, Trash2 } from "lucide-react";
+import { Upload, FileText, Search, Eye, Download, Trash2, Play, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { trpc } from '@/lib/trpc';
+import { trpc } from "@/lib/trpc";
 import { useToast } from "@/hooks/use-toast";
-import UploadDialog from '@/components/knowledge/UploadDialog';
+import UploadDialog from "@/components/knowledge/UploadDialog";
+import { useProjectStore } from "@/stores/projectStore";
+
+/* ── 常量 ── */
+const MATERIAL_TYPES = ["话术库","FAQ","对话录音","经验萃取","产品文档","培训材料","其他"];
+const EXP_SOURCES: Record<string,{label:string;color:string}> = {
+  E1_COMPANY:  { label:"E1 官方", color:"bg-green-100 text-green-700" },
+  E2_INDUSTRY: { label:"E2 实战", color:"bg-blue-100 text-blue-700" },
+  E3_CROSS_INDUSTRY: { label:"E3 通用", color:"bg-purple-100 text-purple-700" },
+};
+const VERIFY_STATUS: Record<string,{label:string;icon:string}> = {
+  VERIFIED:   { label:"已校验", icon:"✅" },
+  PENDING:    { label:"待校验", icon:"⏳" },
+  REWORK:     { label:"返工",   icon:"⚠️" },
+};
 
 export default function RawMaterialsPage() {
   const { toast } = useToast();
-  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState('test-project');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterFormat, setFilterFormat] = useState('ALL');
-  const [filterStatus, setFilterStatus] = useState('ALL');
+  const { projectId } = useProjectStore();
+  const pid = projectId || "default-project";
 
-  const { data: userData } = trpc.user.getCurrent.useQuery();
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterFormat, setFilterFormat] = useState("ALL");
+  const [filterStatus, setFilterStatus] = useState("ALL");
+  const [filterType, setFilterType] = useState("ALL");
+  const [page, setPage] = useState(1);
+  const [selectedId, setSelectedId] = useState<string|null>(null);
+  const [detailTab, setDetailTab] = useState<"preview"|"markdown">("preview");
 
-  const { data: projectsData, isLoading: projectsLoading } = trpc.project.list.useQuery({
-    workspaceId: userData?.workspaces?.[0]?.workspaceId || 'default-workspace-id',
-    limit: 100
-  }, {
-    enabled: !!userData
+  const pageSize = 20;
+  const utils = trpc.useUtils();
+
+  /* ── 数据查询 ── */
+  const { data: rawData, isLoading, refetch } = trpc.raw.getAll.useQuery(
+    { projectId: pid, search: search || undefined, limit: pageSize, offset: (page-1)*pageSize },
+    { enabled: !!pid }
+  );
+
+  /* ── 删除 ── */
+  const deleteMut = trpc.raw.delete.useMutation({
+    onSuccess: () => { toast({ title:"删除成功" }); utils.raw.getAll.invalidate(); },
+    onError: (e) => toast({ title:"删除失败", description:e.message, variant:"destructive" }),
   });
 
-  const {
-    data: rawData,
-    isLoading: rawLoading,
-    refetch
-  } = trpc.raw.getAll.useQuery({
-    projectId: selectedProjectId,
-    search: searchTerm,
-    limit: 100
-  }, {
-    enabled: !!selectedProjectId
-  });
-
-  const { data: statsData } = trpc.raw.getStats.useQuery({
-    projectId: selectedProjectId
-  }, {
-    enabled: !!selectedProjectId
-  });
-
-  const deleteMutation = trpc.raw.delete.useMutation({
-    onSuccess: () => {
-      toast({ title: "删除成功", description: "素材已成功删除" });
-      refetch();
+  /* ── 加工 ── */
+  const processMut = trpc.pipeline.processRaw.useMutation({
+    onSuccess: (d) => {
+      toast({ title:`加工完成`, description:`生成 ${d.atomsCreated ?? 0} 个原子块，${d.qaCreated ?? 0} 个QA对` });
+      utils.raw.getAll.invalidate();
     },
-    onError: (error) => {
-      toast({ title: "删除失败", description: error.message || "删除素材时出现错误", variant: "destructive" });
-    },
+    onError: (e) => toast({ title:"加工失败", description:e.message, variant:"destructive" }),
   });
 
-  // ── 新增：生产线触发 ──────────────────────────────────────────
-  const processMutation = trpc.pipeline.processRaw.useMutation({
-    onSuccess: (data) => {
-      toast({ title: `处理完成，生成 ${data.atomsCreated} 个原子块` });
-      refetch();
-    },
-    onError: (e) => toast({ title: '处理失败', description: e.message, variant: 'destructive' }),
-  });
-  // ─────────────────────────────────────────────────────────────
-
+  /* ── 上传成功后刷新 ── */
   useEffect(() => {
-    if (projectsData?.items && projectsData.items.length > 0 && !selectedProjectId) {
-      setSelectedProjectId(projectsData.items[0].id);
-    }
-  }, [projectsData, selectedProjectId]);
+    if (!isUploadOpen) { utils.raw.getAll.invalidate(); }
+  }, [isUploadOpen]);
 
-  const handleDelete = (id: string) => {
-    if (confirm("确定要删除这个素材吗？此操作不可撤销。")) {
-      deleteMutation.mutate({ id });
-    }
+  /* ── 过滤 ── */
+  const items = (rawData?.items ?? []).filter((f:any) => {
+    if (filterFormat !== "ALL" && f.format !== filterFormat) return false;
+    if (filterStatus !== "ALL" && f.conversionStatus !== filterStatus) return false;
+    if (filterType !== "ALL" && f.materialType !== filterType) return false;
+    return true;
+  });
+
+  const totalCount = rawData?.totalCount ?? items.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const selected = selectedId ? items.find((f:any) => f.id === selectedId) : null;
+
+  /* ── 状态 Badge ── */
+  const statusBadge = (s:string) => {
+    const map: Record<string,{label:string;cls:string}> = {
+      CONVERTED:  { label:"🟢 已处理", cls:"bg-green-50 text-green-700 border-green-200" },
+      CONVERTING: { label:"🔵 处理中", cls:"bg-blue-50 text-blue-700 border-blue-200" },
+      PENDING:    { label:"🟡 待处理", cls:"bg-yellow-50 text-yellow-700 border-yellow-200" },
+      FAILED:     { label:"🔴 失败",   cls:"bg-red-50 text-red-700 border-red-200" },
+    };
+    const m = map[s] || { label:s, cls:"" };
+    return <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${m.cls}`}>{m.label}</span>;
   };
 
-  const totalFiles = Number(statsData?.total || 0);
-  const convertedFiles = Number(statsData?.byStatus?.find((s: any) => s.conversionStatus === 'CONVERTED')?._count || 0);
-  const pendingFiles = Number(statsData?.byStatus?.find((s: any) => s.conversionStatus === 'PENDING')?._count || 0);
-  const processingFiles = Number(statsData?.byStatus?.find((s: any) => s.conversionStatus === 'CONVERTING')?._count || 0);
-
-  const filteredFiles = rawData?.items?.filter(file => {
-    const matchesSearch = !searchTerm ||
-      file.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (file.originalFileName && file.originalFileName.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesFormat = filterFormat === 'ALL' || file.format === filterFormat;
-    const matchesStatus = filterStatus === 'ALL' || file.conversionStatus === filterStatus;
-    return matchesSearch && matchesFormat && matchesStatus;
-  }) || [];
-
-  const getStatusDisplay = (status: string) => {
-    switch(status) {
-      case 'CONVERTED': return '已处理';
-      case 'CONVERTING': return '处理中';
-      case 'PENDING': return '待处理';
-      case 'FAILED': return '失败';
-      default: return status;
-    }
+  const expBadge = (src:string) => {
+    const e = EXP_SOURCES[src];
+    if (!e) return <span className="text-xs text-gray-400">—</span>;
+    return <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${e.color}`}>{e.label}</span>;
   };
 
-  const getStatusBadgeVariant = (status: string) => {
-    switch(status) {
-      case 'CONVERTED': return 'success';
-      case 'CONVERTING': return 'processing';
-      case 'PENDING': return 'default';
-      case 'FAILED': return 'destructive';
-      default: return 'default';
-    }
-  };
-
-  const getFileIcon = (format: string) => {
-    switch(format) {
-      case 'PDF': return <FileText className="h-5 w-5 text-red-500" />;
-      case 'WORD': return <FileText className="h-5 w-5 text-blue-500" />;
-      case 'EXCEL': return <FileText className="h-5 w-5 text-green-500" />;
-      case 'PPT': return <FileText className="h-5 w-5 text-orange-500" />;
-      default: return <FileText className="h-5 w-5 text-gray-500" />;
-    }
+  const verifyBadge = (v?:string) => {
+    const vv = VERIFY_STATUS[v || "PENDING"] || VERIFY_STATUS.PENDING;
+    return <span className="text-xs">{vv.icon} {vv.label}</span>;
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-full">
       <PageHeader
         title="Raw 素材管理"
-        description="管理企业上传的原始资料文件，启动格式归一与双轨加工"
-        actions={
-          <Button
-            className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm text-white hover:bg-brand-dark"
-            onClick={() => setIsUploadDialogOpen(true)}
-          >
-            <Upload className="h-4 w-4" />上传素材
+        description="管理原始知识素材，支持上传、转换、加工"
+        action={
+          <Button onClick={() => setIsUploadOpen(true)} className="gap-2 bg-brand text-white">
+            <Upload className="h-4 w-4" /> 上传素材
           </Button>
         }
       />
-      <UploadDialog
-        open={isUploadDialogOpen}
-        onOpenChange={setIsUploadDialogOpen}
-        projectId={selectedProjectId}
-      />
 
-      {projectsData?.items && projectsData.items.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>项目选择</CardTitle>
-            <CardDescription>请选择要管理素材的项目</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <select
-              value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand"
-            >
-              {projectsData.items.map(project => (
-                <option key={project.id} value={project.id}>{project.name}</option>
-              ))}
-            </select>
-          </CardContent>
-        </Card>
-      )}
+      {/* ── 筛选栏 ── */}
+      <div className="flex flex-wrap items-center gap-3 px-6 py-3 border-b bg-gray-50/50">
+        <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="搜索素材…"
+            className="h-9 w-full rounded-lg border pl-9 pr-4 text-sm focus:ring-2 focus:ring-brand focus:outline-none" />
+        </div>
+        <select value={filterFormat} onChange={e=>setFilterFormat(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
+          <option value="ALL">格式：全部</option>
+          {["PDF","WORD","EXCEL","PPT","AUDIO","VIDEO"].map(f=><option key={f} value={f}>{f}</option>)}
+        </select>
+        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
+          <option value="ALL">转换：全部</option>
+          <option value="PENDING">待处理</option><option value="CONVERTING">处理中</option>
+          <option value="CONVERTED">已处理</option><option value="FAILED">失败</option>
+        </select>
+        <select value={filterType} onChange={e=>setFilterType(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
+          <option value="ALL">材料类型：全部</option>
+          {MATERIAL_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">概览</TabsTrigger>
-          <TabsTrigger value="files">文件管理</TabsTrigger>
-          <TabsTrigger value="process">处理状态</TabsTrigger>
-          <TabsTrigger value="settings">配置</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">总文件数</CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{totalFiles}</div>
-                <p className="text-xs text-muted-foreground">+18% 上月</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">已处理</CardTitle>
-                <Database className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{Number(convertedFiles)}</div>
-                <p className="text-xs text-muted-foreground">+22% 上月</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">待处理</CardTitle>
-                <Settings className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{Number(pendingFiles)}</div>
-                <p className="text-xs text-muted-foreground">-5 今日</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">成功率</CardTitle>
-                <Upload className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {Number(totalFiles) > 0 ? Math.round((Number(convertedFiles) / Number(totalFiles)) * 100) + '%' : '0%'}
-                </div>
-                <p className="text-xs text-muted-foreground">+1.2% 上月</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>最近上传的文件</CardTitle>
-              <CardDescription>查看最新上传的原始素材文件</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {filteredFiles.slice(0, 5).map((file) => (
-                  <div key={file.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
-                    <div className="flex items-center space-x-4">
-                      {getFileIcon(file.format)}
-                      <div>
-                        <div className="font-medium">{file.title}</div>
-                        <div className="text-sm text-gray-500">
-                          {file.originalFileName} • 上传于 {new Date(file.createdAt).toLocaleString('zh-CN')}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge variant={getStatusBadgeVariant(file.conversionStatus)}>
-                        {getStatusDisplay(file.conversionStatus)}
-                      </Badge>
-                      <Button variant="ghost" size="sm">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {/* ── 新增：生产线按钮 ── */}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => processMutation.mutate({ rawId: file.id, projectId: selectedProjectId })}
-                        disabled={processMutation.isPending || file.conversionStatus === 'CONVERTED'}
-                      >
-                        {processMutation.isPending ? '处理中…' : '▶ 生产线'}
-                      </Button>
-                      {/* ───────────────────── */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(file.id)}
-                        disabled={deleteMutation.isPending}
-                      >
+      {/* ── 主区域：表格 + 右侧面板 ── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* 左侧表格 */}
+        <div className={`flex-1 overflow-auto ${selected ? "border-r" : ""}`}>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 sticky top-0 z-10">
+              <tr className="text-left text-xs text-gray-500 uppercase">
+                <th className="px-4 py-3 w-8"><input type="checkbox" className="w-4 h-4 rounded" /></th>
+                <th className="px-4 py-3">素材名称</th>
+                <th className="px-4 py-3">格式</th>
+                <th className="px-4 py-3">材料类型</th>
+                <th className="px-4 py-3">经验源</th>
+                <th className="px-4 py-3">转换</th>
+                <th className="px-4 py-3">校验</th>
+                <th className="px-4 py-3">时间</th>
+                <th className="px-4 py-3 text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {items.map((f:any) => (
+                <tr key={f.id}
+                  onClick={() => setSelectedId(f.id === selectedId ? null : f.id)}
+                  className={`hover:bg-blue-50/40 cursor-pointer transition ${f.id === selectedId ? "bg-blue-50" : ""}`}>
+                  <td className="px-4 py-3"><input type="checkbox" className="w-4 h-4 rounded" onClick={e=>e.stopPropagation()} /></td>
+                  <td className="px-4 py-3 font-medium">{f.title || f.originalFileName}</td>
+                  <td className="px-4 py-3"><Badge variant="outline">{f.format}</Badge></td>
+                  <td className="px-4 py-3 text-xs">{f.materialType || "—"}</td>
+                  <td className="px-4 py-3">{expBadge(f.experienceSource)}</td>
+                  <td className="px-4 py-3">{statusBadge(f.conversionStatus)}</td>
+                  <td className="px-4 py-3">{verifyBadge(f.verifyStatus)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{new Date(f.createdAt).toLocaleDateString("zh-CN")}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1" onClick={e=>e.stopPropagation()}>
+                      <button title="预览" className="p-1.5 rounded hover:bg-gray-100"><Eye className="h-4 w-4 text-gray-500" /></button>
+                      <button title="下载" className="p-1.5 rounded hover:bg-gray-100"><Download className="h-4 w-4 text-gray-500" /></button>
+                      <button title="加工" disabled={processMut.isPending || f.conversionStatus==="CONVERTED"}
+                        onClick={() => processMut.mutate({ rawId:f.id, projectId:pid })}
+                        className="p-1.5 rounded hover:bg-blue-50 disabled:opacity-40">
+                        <Play className="h-4 w-4 text-blue-600" />
+                      </button>
+                      <button title="删除" disabled={deleteMut.isPending}
+                        onClick={() => { if(confirm("确认删除?")) deleteMut.mutate({id:f.id}); }}
+                        className="p-1.5 rounded hover:bg-red-50">
                         <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
+                      </button>
                     </div>
-                  </div>
-                ))}
-                {filteredFiles.length === 0 && !rawLoading && (
-                  <div className="text-center py-8 text-gray-500">暂无文件，请点击上传素材</div>
-                )}
-                {rawLoading && (
-                  <div className="text-center py-8 text-gray-500">加载中...</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && !isLoading && (
+                <tr><td colSpan={9} className="text-center py-12 text-gray-400">暂无素材，请点击上传</td></tr>
+              )}
+              {isLoading && (
+                <tr><td colSpan={9} className="text-center py-12 text-gray-400">加载中…</td></tr>
+              )}
+            </tbody>
+          </table>
 
-        <TabsContent value="files">
-          <Card>
-            <CardHeader>
-              <CardTitle>文件管理</CardTitle>
-              <CardDescription>管理您的所有原始素材文件</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                <div className="relative max-w-sm w-full">
-                  <Input
-                    type="text"
-                    placeholder="搜索文件..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
-                  />
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                </div>
-                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-                  <select
-                    value={filterFormat}
-                    onChange={(e) => setFilterFormat(e.target.value)}
-                    className="border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand"
-                  >
-                    <option value="ALL">全部类型</option>
-                    <option value="PDF">PDF</option>
-                    <option value="WORD">Word</option>
-                    <option value="EXCEL">Excel</option>
-                    <option value="PPT">PowerPoint</option>
-                    <option value="AUDIO">音频</option>
-                    <option value="VIDEO">视频</option>
-                  </select>
-                  <select
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand"
-                  >
-                    <option value="ALL">全部状态</option>
-                    <option value="PENDING">待处理</option>
-                    <option value="CONVERTING">处理中</option>
-                    <option value="CONVERTED">已处理</option>
-                    <option value="FAILED">失败</option>
-                  </select>
-                </div>
-              </div>
+          {/* ── 分页 ── */}
+          <div className="flex items-center justify-between px-4 py-3 border-t text-sm text-gray-500">
+            <span>共 {totalCount} 条</span>
+            <div className="flex items-center gap-2">
+              <button disabled={page<=1} onClick={()=>setPage(p=>p-1)} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
+              <span>{page} / {totalPages}</span>
+              <button disabled={page>=totalPages} onClick={()=>setPage(p=>p+1)} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
+            </div>
+          </div>
+        </div>
 
-              <div className="border rounded-lg">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">文件名</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">格式</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">大小</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">上传时间</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {filteredFiles.map((file) => (
-                      <tr key={file.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            {getFileIcon(file.format)}
-                            <div className="ml-2 font-medium">{file.title}</div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{file.format}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {file.fileSize ? (file.fileSize / 1024 / 1024).toFixed(1) + ' MB' : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(file.createdAt).toLocaleDateString('zh-CN')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge variant={getStatusBadgeVariant(file.conversionStatus)}>
-                            {getStatusDisplay(file.conversionStatus)}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => alert(`预览功能 - ${file.title}`)}
-                            className="mr-2"
-                          >
-                            <Eye className="h-4 w-4 text-blue-600" />
-                          </Button>
-                          {/* ── 新增：生产线按钮 ── */}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => processMutation.mutate({ rawId: file.id, projectId: selectedProjectId })}
-                            disabled={processMutation.isPending || file.conversionStatus === 'CONVERTED'}
-                            className="mr-2"
-                          >
-                            {processMutation.isPending ? '处理中…' : '▶ 生产线'}
-                          </Button>
-                          {/* ───────────────────── */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(file.id)}
-                            disabled={deleteMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredFiles.length === 0 && !rawLoading && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">暂无匹配的文件</td>
-                      </tr>
-                    )}
-                    {rawLoading && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">加载中...</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* ── 右侧详情面板 ── */}
+        {selected && (
+          <div className="w-[400px] flex-shrink-0 overflow-auto bg-white border-l">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+              <h3 className="font-semibold text-sm truncate">{selected.title || selected.originalFileName}</h3>
+              <button onClick={()=>setSelectedId(null)} className="p-1 rounded hover:bg-gray-200"><X className="h-4 w-4" /></button>
+            </div>
 
-        <TabsContent value="process">
-          <Card>
-            <CardHeader>
-              <CardTitle>处理状态</CardTitle>
-              <CardDescription>监控文件处理进度和状态</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {filteredFiles
-                  .filter(f => f.conversionStatus !== 'CONVERTED')
-                  .map((item) => (
-                  <Card key={item.id} className="p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-medium">{item.title}</h4>
-                        <p className="text-sm text-gray-500 mt-1">格式: {item.format} • 类型: {item.materialType}</p>
-                      </div>
-                      <Badge variant={getStatusBadgeVariant(item.conversionStatus)}>
-                        {getStatusDisplay(item.conversionStatus)}
-                      </Badge>
-                    </div>
-                    <div className="mt-3">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span>进度</span>
-                        <span>
-                          {item.conversionStatus === 'CONVERTED' ? '100%' :
-                           item.conversionStatus === 'CONVERTING' ? '65%' : '0%'}
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        {(() => {
-                          const barWidth = item.conversionStatus === 'CONVERTED' ? '100%'
-                            : item.conversionStatus === 'CONVERTING' ? '65%'
-                            : '0%';
-                          const barColor = item.conversionStatus === 'CONVERTED' ? 'bg-green-500'
-                            : item.conversionStatus === 'CONVERTING' ? 'bg-blue-500' : 'bg-yellow-500';
-                          return (
-                            <div
-                              className={`h-2 rounded-full ${barColor}`}
-                              style={{ width: barWidth }}
-                            ></div>
-                          );
-                        })()}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {(() => {
-                          const etaText = item.conversionStatus === 'CONVERTED' ? '已完成'
-                            : item.conversionStatus === 'CONVERTING' ? '预计5分钟'
-                            : '即将开始';
-                          return `ETA: ${etaText}`;
-                        })()}
-                      </p>
-                    </div>
-                  </Card>
-                ))}
-                {filteredFiles.filter(f => f.conversionStatus !== 'CONVERTED').length === 0 && !rawLoading && (
-                  <div className="text-center py-8 text-gray-500">所有文件都已处理完成</div>
-                )}
-                {rawLoading && (
-                  <div className="text-center py-8 text-gray-500">加载中...</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            {/* 预览切换 */}
+            <div className="flex border-b">
+              {(["preview","markdown"] as const).map(t=>(
+                <button key={t} onClick={()=>setDetailTab(t)}
+                  className={`flex-1 py-2 text-xs font-medium ${detailTab===t ? "border-b-2 border-brand text-brand" : "text-gray-500"}`}>
+                  {t==="preview" ? "原件预览" : "Markdown预览"}
+                </button>
+              ))}
+            </div>
+            <div className="p-4 text-xs text-gray-500 min-h-[120px] border-b">
+              {detailTab==="preview"
+                ? <div className="flex items-center justify-center h-24 bg-gray-50 rounded">原件预览区域</div>
+                : <pre className="whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded max-h-[200px] overflow-auto">{selected.markdownContent || "暂无Markdown内容"}</pre>
+              }
+            </div>
 
-        <TabsContent value="settings">
-          <Card>
-            <CardHeader>
-              <CardTitle>处理配置</CardTitle>
-              <CardDescription>配置文件处理的参数和规则</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
+            {/* 入库卡元数据 */}
+            <div className="p-4 space-y-3 border-b">
+              <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1">📋 入库卡元数据</h4>
+              <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">处理优先级</label>
-                  <select className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand">
-                    <option>标准 (默认)</option>
-                    <option>高优先级</option>
-                    <option>低优先级</option>
+                  <label className="text-gray-500">材料类型</label>
+                  <select defaultValue={selected.materialType||""} className="w-full mt-1 rounded border px-2 py-1 text-xs">
+                    <option value="">请选择</option>
+                    {MATERIAL_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">格式转换选项</label>
-                  <div className="space-y-2">
-                    <div className="flex items-center">
-                      <input type="checkbox" id="convert-pdf" className="rounded" defaultChecked />
-                      <label htmlFor="convert-pdf" className="ml-2 text-sm">PDF 文档转换</label>
-                    </div>
-                    <div className="flex items-center">
-                      <input type="checkbox" id="extract-images" className="rounded" defaultChecked />
-                      <label htmlFor="extract-images" className="ml-2 text-sm">图像内容提取</label>
-                    </div>
-                    <div className="flex items-center">
-                      <input type="checkbox" id="ocr-text" className="rounded" />
-                      <label htmlFor="ocr-text" className="ml-2 text-sm">OCR 文本识别</label>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">存储保留策略</label>
-                  <select className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand">
-                    <option>永久保存</option>
-                    <option>保存1年</option>
-                    <option>保存6个月</option>
-                    <option>保存1个月</option>
+                  <label className="text-gray-500">经验源</label>
+                  <select defaultValue={selected.experienceSource||""} className="w-full mt-1 rounded border px-2 py-1 text-xs">
+                    <option value="">请选择</option>
+                    <option value="E1_COMPANY">E1 官方/标准化</option>
+                    <option value="E2_INDUSTRY">E2 实战经验</option>
+                    <option value="E3_CROSS_INDUSTRY">E3 行业通用</option>
                   </select>
                 </div>
-                <Button className="w-full bg-brand hover:bg-brand-dark text-white">保存配置</Button>
+                <div>
+                  <label className="text-gray-500">行业</label>
+                  <select className="w-full mt-1 rounded border px-2 py-1 text-xs">
+                    <option>家居建材</option><option>教育</option><option>医疗</option><option>其他</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-gray-500">可对外</label>
+                  <select defaultValue={selected.exposureLevel||""} className="w-full mt-1 rounded border px-2 py-1 text-xs">
+                    <option value="EXTERNAL">可对外</option><option value="INTERNAL">内部</option>
+                    <option value="NEEDS_APPROVAL">需审批</option><option value="STRICTLY_FORBIDDEN">严禁</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-gray-500">有效期</label>
+                  <input type="date" className="w-full mt-1 rounded border px-2 py-1 text-xs" />
+                </div>
+                <div>
+                  <label className="text-gray-500">备注</label>
+                  <textarea rows={2} className="w-full mt-1 rounded border px-2 py-1 text-xs" placeholder="备注…" />
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              <Button size="sm" className="w-full text-xs">保存元数据</Button>
+            </div>
+
+            {/* 关联 */}
+            <div className="p-4 space-y-2">
+              <details className="group">
+                <summary className="text-xs font-semibold text-gray-700 cursor-pointer">▸ 关联 Atoms（{selected.atoms?.length ?? 0} 条）</summary>
+                <div className="mt-2 space-y-1 pl-3">
+                  {(selected.atoms ?? []).map((a:any) => (
+                    <div key={a.id} className="text-xs text-gray-600">• {a.title}</div>
+                  ))}
+                  {!(selected.atoms?.length) && <div className="text-xs text-gray-400">暂无关联</div>}
+                </div>
+              </details>
+              <details className="group">
+                <summary className="text-xs font-semibold text-gray-700 cursor-pointer">▸ 关联 QA Pairs（{selected.qaPairs?.length ?? 0} 组）</summary>
+                <div className="mt-2 space-y-1 pl-3">
+                  {(selected.qaPairs ?? []).map((q:any) => (
+                    <div key={q.id} className="text-xs text-gray-600">• {q.question?.slice(0,40)}</div>
+                  ))}
+                  {!(selected.qaPairs?.length) && <div className="text-xs text-gray-400">暂无关联</div>}
+                </div>
+              </details>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 上传弹窗 ── */}
+      <UploadDialog
+        open={isUploadOpen}
+        onOpenChange={(v) => { setIsUploadOpen(v); if(!v) refetch(); }}
+      />
     </div>
   );
 }

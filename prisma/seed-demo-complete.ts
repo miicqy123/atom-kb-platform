@@ -70,7 +70,7 @@ async function main() {
     await prisma.apiKey.deleteMany({ where: { projectId: projectId } });
     await prisma.basePack.deleteMany({});
     await prisma.dimensionConfig.deleteMany({});
-    await prisma.auditLog.deleteMany({ where: { userId: 'system' } });
+    await prisma.auditLog.deleteMany({ where: { userId: 'demo-system' } });
   } catch (e) {
     console.log('删除其他配置数据时出现错误，继续...');
   }
@@ -638,9 +638,22 @@ async function main() {
     },
   });
 
-  // === 14. 创建 AuditLog ===
-  // Skip creating audit logs for now since they require existing users
-  /*
+  // === 14. 创建 AuditLog (with demo user that we'll create if not exists) ===
+  // Try to create a system user for audit logs if one doesn't exist
+  let systemUser = await prisma.user.findUnique({ where: { email: 'system@example.com' } });
+  if (!systemUser) {
+    systemUser = await prisma.user.create({
+      data: {
+        email: 'system@example.com',
+        name: 'System User',
+        passwordHash: null,
+        role: 'READONLY',
+        tenantId: 'default-tenant',
+        status: 'active',
+      }
+    });
+  }
+
   const auditLogs = [
     { action: 'CREATE_BLUEPRINT', entityType: 'blueprint', entityId: createdBlueprints[0].id, entityName: createdBlueprints[0].name },
     { action: 'ACTIVATE_ATOM', entityType: 'atom', entityId: createdAtoms[0].id, entityName: createdAtoms[0].title },
@@ -652,14 +665,13 @@ async function main() {
   for (const log of auditLogs) {
     await prisma.auditLog.create({
       data: {
-        userId: 'system',
+        userId: systemUser.id,
         ...log,
         changeSummary: `演示数据创建 - ${log.action}`,
         severity: 'info',
       },
     });
   }
-  */
 
   console.log('演示数据创建完成！');
   console.log(`- 创建了 ${createdRaws.length} 条 Raw 素材`);

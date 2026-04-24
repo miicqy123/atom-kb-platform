@@ -1,9 +1,9 @@
-"use client";
-
+﻿"use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { BookOpen, PenTool, Settings2, Shield, Building2, Star, Clock } from "lucide-react";
+import { useProjectStore } from "@/stores/projectStore";
 
 const NAV_SECTIONS = [
   {
@@ -32,7 +32,6 @@ const NAV_SECTIONS = [
       { label: "Agent 列表", href: "/orchestration/agents" },
       { label: "Workflow 模板", href: "/orchestration/workflows" },
       { label: "运行记录", href: "/orchestration/runs" },
-      { label: "多角色元编排", href: "/orchestration/multi-agent" },
       { label: "HITL 审核队列", href: "/orchestration/review" },
     ],
   },
@@ -49,34 +48,39 @@ const NAV_SECTIONS = [
     label: "企业后台", icon: Building2, color: "text-admin", basePath: "/admin",
     items: [
       { label: "租户管理", href: "/admin/tenants" },
-      { label: "Workspace", href: "/admin/workspaces" },
       { label: "Project 管理", href: "/admin/projects" },
       { label: "用户与角色", href: "/admin/users" },
-      { label: "资产生命周期", href: "/admin/lifecycle" },
-      { label: "系统配置", href: "/admin/settings" },
+      { label: "资产生命周期", href: "/admin/asset-lifecycle" },
+      { label: "系统配置", href: "/admin/system-config" },
     ],
   },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { projectId } = useProjectStore();
 
   return (
-    <aside className="flex w-60 flex-col border-r bg-white">
-      <div className="flex h-14 items-center gap-2 border-b px-4">
-        <div className="h-8 w-8 rounded-lg bg-brand flex items-center justify-center text-white font-bold text-sm">AK</div>
+    <aside className="w-56 border-r bg-white flex flex-col h-full">
+      <Link href="/" className="flex items-center gap-2 px-4 py-4 border-b hover:bg-gray-50">
+        <span className="w-8 h-8 rounded-lg bg-brand text-white flex items-center justify-center text-xs font-bold">AK</span>
         <span className="font-semibold text-sm">Atom KB Platform</span>
-      </div>
+      </Link>
+
       <nav className="flex-1 overflow-y-auto py-2">
         {NAV_SECTIONS.map((section) => (
           <div key={section.label} className="mb-1">
             <div className={cn("flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wider", section.color)}>
-              <section.icon className="h-4 w-4" />{section.label}
+              <section.icon className="h-4 w-4" />
+              {section.label}
             </div>
             {section.items.map((item) => (
               <Link key={item.href} href={item.href}
-                className={cn("block px-4 py-1.5 pl-10 text-sm transition-colors hover:bg-gray-100",
-                  pathname === item.href && "bg-blue-50 text-brand font-medium"
+                className={cn(
+                  "block px-4 py-1.5 pl-10 text-sm transition-colors",
+                  pathname === item.href
+                    ? "bg-brand/5 text-brand font-medium border-r-2 border-brand"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                 )}>
                 {item.label}
               </Link>
@@ -84,9 +88,20 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
-      <div className="border-t p-3 space-y-1">
-        <Link href="#" className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-800"><Star className="h-3.5 w-3.5" />收藏</Link>
-        <Link href="#" className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-800"><Clock className="h-3.5 w-3.5" />最近访问</Link>
+
+      <div className="border-t px-4 py-3 space-y-2">
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <Star className="h-3.5 w-3.5" /> 收藏
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <Clock className="h-3.5 w-3.5" /> 最近访问
+        </div>
+        {projectId && (
+          <div className="mt-2 pt-2 border-t">
+            <div className="text-[10px] text-gray-400 uppercase">Project</div>
+            <div className="text-xs font-medium text-gray-700 truncate">{projectId}</div>
+          </div>
+        )}
       </div>
     </aside>
   );
