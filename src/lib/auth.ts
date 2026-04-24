@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "dev-fallback-secret-please-change",
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30天

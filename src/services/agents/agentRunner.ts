@@ -4,7 +4,7 @@ import { AGENT_PROMPTS } from './prompts';
 import type { AgentRole, AgentMessage } from './types';
 
 const openai = new OpenAI({
-  apiKey: process.env.QWEN_API_KEY || 'sk-3129db2ab6184ea091184e9c7da5cc1c',
+  apiKey: process.env.QWEN_API_KEY || '',
   baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
 });
 

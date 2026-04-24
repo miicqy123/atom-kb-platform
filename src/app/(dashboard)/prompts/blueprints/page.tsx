@@ -9,12 +9,16 @@ import { ConfidenceBar } from "@/components/ui/ConfidenceBar";
 import { Pagination } from "@/components/ui/Pagination";
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
+import { useToast } from "@/hooks/use-toast";
 
 export default function BlueprintsPage() {
   const { projectId } = useProjectStore();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const { toast } = useToast();
+
+  const utils = trpc.useUtils();
 
   const limit = 20;
   const offset = (page - 1) * limit;
@@ -28,6 +32,42 @@ export default function BlueprintsPage() {
   }, {
     enabled: !!projectId
   });
+
+  // 创建蓝图 mutation
+  const createBlueprintMutation = trpc.blueprint.create.useMutation({
+    onSuccess: (data) => {
+      toast({
+        title: "创建成功",
+        description: "蓝图已成功创建",
+      });
+      utils.blueprint.getAll.invalidate(); // 使缓存失效
+      // 可以重定向到编辑页面，这里我们只是显示提示
+    },
+    onError: (error) => {
+      toast({
+        title: "创建失败",
+        description: error.message || "创建蓝图时出现错误",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const handleCreateBlueprint = async () => {
+    if (!projectId) {
+      toast({
+        title: "错误",
+        description: "请选择一个项目",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createBlueprintMutation.mutate({
+      name: "新蓝图",
+      projectId: projectId,
+      description: "新创建的蓝图",
+    });
+  };
 
   const columns = [
     { key: "name", label: "蓝图名称" },
@@ -44,7 +84,14 @@ export default function BlueprintsPage() {
   return (
     <div>
       <PageHeader title="蓝图库" description="Blueprint 蓝图的创建、配置与版本管理"
-        actions={<button className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm text-white"><Plus className="h-4 w-4" />新建蓝图</button>} />
+        actions={<button
+          onClick={handleCreateBlueprint}
+          disabled={createBlueprintMutation.isPending}
+          className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm text-white disabled:opacity-50"
+        >
+          <Plus className="h-4 w-4" />
+          {createBlueprintMutation.isPending ? '创建中...' : '新建蓝图'}
+        </button>} />
 
       <div className="mb-4 flex gap-3">
         <div className="relative flex-1">
