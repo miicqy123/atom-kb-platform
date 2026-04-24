@@ -1,18 +1,18 @@
 // src/server/routers/slotConfig.ts
 import { z } from 'zod';
-import { router, protectedProcedure } from '../trpc';
+import { router, protectedProcedure, permissionProcedure } from '../trpc';
 import { prisma } from '@/lib/prisma';
 
 export const slotConfigRouter = router({
-  create: protectedProcedure
+  create: permissionProcedure('blueprint:configure')
     .input(z.object({
       blueprintId: z.string(),
       slotKey: z.string(),
       subSlotKey: z.string().optional(),
       topN: z.number().default(3),
-      layers: z.array(z.string()),
+      layers: z.array(z.enum(['A', 'B', 'C', 'D'])),
       dimensions: z.array(z.number()),
-      conflictPriority: z.array(z.string()).default(['D','C','B','A']),
+      conflictPriority: z.array(z.enum(['A', 'B', 'C', 'D'])).default(['D','C','B','A']),
     }))
     .mutation(async ({ input }) => {
       // 获取当前最大 order
@@ -31,7 +31,7 @@ export const slotConfigRouter = router({
           fetchRules: {
             create: {
               topN: input.topN,
-              layers: input.layers as any,
+              layers: input.layers,
               dimensions: input.dimensions,
             },
           },
@@ -40,7 +40,7 @@ export const slotConfigRouter = router({
       return slotConfig;
     }),
 
-  delete: protectedProcedure
+  delete: permissionProcedure('blueprint:configure')
     .input(z.object({ blueprintId: z.string(), slotKey: z.string() }))
     .mutation(async ({ input }) => {
       await prisma.slotConfig.deleteMany({

@@ -14,7 +14,11 @@ export default function SlotsConfigPage({ params }: { params: { id: string } }) 
   const blueprintId = params.id;
   const { toast } = useToast();
   const [editingSlot, setEditingSlot] = useState<string | null>(null);
-  const [form, setForm] = useState({ topN: 3, layers: ['A','B','C','D'], dimensions: '' });
+  const [form, setForm] = useState({
+    topN: 3,
+    layers: ['A','B','C','D'] as ('A' | 'B' | 'C' | 'D')[],
+    dimensions: ''
+  });
 
   const { data: slots, refetch } = trpc.blueprint.preview.useQuery({ blueprintId });
 
@@ -95,7 +99,7 @@ export default function SlotsConfigPage({ params }: { params: { id: string } }) 
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">允许层级</label>
                 <div className="flex gap-2">
-                  {['A','B','C','D'].map(layer => (
+                  {(['A','B','C','D'] as const).map(layer => (
                     <label key={layer} className="flex items-center gap-1 text-sm cursor-pointer">
                       <input
                         type="checkbox"
@@ -104,6 +108,7 @@ export default function SlotsConfigPage({ params }: { params: { id: string } }) 
                           if (e.target.checked) setForm(f => ({ ...f, layers: [...f.layers, layer] }));
                           else setForm(f => ({ ...f, layers: f.layers.filter(l => l !== layer) }));
                         }}
+                        value={layer}
                         className="w-4 h-4"
                       />
                       {layer} 层

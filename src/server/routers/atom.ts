@@ -308,7 +308,7 @@ export const atomRouter = router({
     }),
 
   // 批量归档原子块
-  batchArchive: protectedProcedure
+  batchArchive: permissionProcedure('atom:archive')
     .input(z.object({
       ids: z.array(z.string())
     }))

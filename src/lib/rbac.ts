@@ -33,7 +33,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: ['*'],
   TENANT_ADMIN: ['*'],
   KNOWLEDGE_EDITOR: [
-    'atom:read', 'atom:write', 'atom:activate',
+    'atom:read', 'atom:write', 'atom:activate', 'atom:archive',
     'blueprint:read', 'blueprint:write',
     'qa:read', 'qa:write',
     'raw:read', 'raw:write', 'raw:process',
@@ -41,14 +41,14 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   PROMPT_ENGINEER: [
     'atom:read', 'atom:write',
-    'blueprint:read', 'blueprint:write', 'blueprint:assemble',
+    'blueprint:read', 'blueprint:write', 'blueprint:assemble', 'blueprint:configure',
     'qa:read', 'qa:write',
     'raw:read', 'raw:write',
     'workflow:run', 'review:read',
   ],
   OPERATOR: [
     'atom:read', 'atom:write',
-    'blueprint:read', 'blueprint:assemble',
+    'blueprint:read', 'blueprint:assemble', 'blueprint:configure',
     'qa:read', 'qa:write',
     'raw:read', 'raw:process',
     'workflow:run', 'review:read',

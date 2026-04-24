@@ -17,7 +17,7 @@ export function FeedbackWidget({ runId }: { runId: string }) {
 
   if (submitted) {
     return (
-      <div className="text-center py-4 text-sm text-green-600">✅ 反馈已记录</div>
+      <div className="text-center py-4 text-sm text-green-600">✅ 反感已记录</div>
     );
   }
 
