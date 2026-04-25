@@ -55,6 +55,7 @@ export default function RawMaterialsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [expSourceFilter, setExpSourceFilter] = useState("");
+  const [viewMode, setViewMode] = useState<"table" | "card" | "kanban">("table");
   const [showUpload, setShowUpload] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -146,178 +147,193 @@ export default function RawMaterialsPage() {
           <option value="E2_INDUSTRY">E2 行业</option>
           <option value="E3_CROSS_INDUSTRY">E3 跨行业</option>
         </select>
+        <div className="flex items-center border rounded-lg overflow-hidden ml-auto shrink-0">
+          <button onClick={() => setViewMode("table")} className={`px-3 py-1.5 text-xs ${viewMode === "table" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+          </button>
+          <button onClick={() => setViewMode("card")} className={`px-3 py-1.5 text-xs ${viewMode === "card" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" /></svg>
+          </button>
+          <button onClick={() => setViewMode("kanban")} className={`px-3 py-1.5 text-xs ${viewMode === "kanban" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" /></svg>
+          </button>
+        </div>
       </div>
 
-      {/* 主内容区：Master-Detail */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* 左侧：素材列表 */}
-        <div className="flex-1 min-w-0 overflow-y-auto border-r">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-40 text-gray-400 text-sm">加载中...</div>
-          ) : items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-gray-400">
-              <File className="h-8 w-8 mb-2" />
-              <p className="text-sm">暂无素材，请点击右上角上传</p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {items.map((r: any) => (
-                <div
-                  key={r.id}
-                  onClick={() => setSelectedId(r.id === selectedId ? null : r.id)}
-                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
-                    r.id === selectedId ? "bg-blue-50 border-l-2 border-l-blue-600" : "hover:bg-gray-50 border-l-2 border-l-transparent"
-                  }`}
-                >
-                  <div className="shrink-0">
-                    {FORMAT_ICONS[r.format] ?? <FileText className="h-4 w-4 text-gray-400" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">{r.title}</div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-gray-400">{MATERIAL_TYPE_LABELS[r.materialType] || r.materialType}</span>
-                      <span className="text-xs text-gray-300">·</span>
-                      <span className="text-xs text-gray-400">{EXP_SOURCE_LABELS[r.experienceSource] || r.experienceSource}</span>
-                      <span className="text-xs text-gray-300">·</span>
-                      <span className="text-xs text-gray-400">{formatFileSize(r.fileSize)}</span>
+      {/* 主内容区 */}
+      {viewMode === "table" && (
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* 左侧：素材列表 */}
+          <div className="flex-1 min-w-0 overflow-y-auto border-r">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-40 text-gray-400 text-sm">加载中...</div>
+            ) : items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+                <File className="h-8 w-8 mb-2" />
+                <p className="text-sm">暂无素材，请点击右上角上传</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {items.map((r: any) => (
+                  <div
+                    key={r.id}
+                    onClick={() => setSelectedId(r.id === selectedId ? null : r.id)}
+                    className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
+                      r.id === selectedId ? "bg-blue-50 border-l-2 border-l-blue-600" : "hover:bg-gray-50 border-l-2 border-l-transparent"
+                    }`}
+                  >
+                    <div className="shrink-0">
+                      {FORMAT_ICONS[r.format] ?? <FileText className="h-4 w-4 text-gray-400" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{r.title}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-gray-400">{MATERIAL_TYPE_LABELS[r.materialType] || r.materialType}</span>
+                        <span className="text-xs text-gray-300">·</span>
+                        <span className="text-xs text-gray-400">{EXP_SOURCE_LABELS[r.experienceSource] || r.experienceSource}</span>
+                        <span className="text-xs text-gray-300">·</span>
+                        <span className="text-xs text-gray-400">{formatFileSize(r.fileSize)}</span>
+                      </div>
+                    </div>
+                    <div className="shrink-0">
+                      <StatusBadge status={r.conversionStatus} />
                     </div>
                   </div>
-                  <div className="shrink-0">
-                    <StatusBadge status={r.conversionStatus} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 分页 */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 py-3 border-t">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30">
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="text-xs text-gray-500">{page} / {totalPages}</span>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30">
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 右侧：详情面板 */}
-        <div className="w-[400px] shrink-0 overflow-y-auto bg-white">
-          {selectedItem ? (
-            <div className="p-5 space-y-5">
-              {/* 标题 */}
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5">{FORMAT_ICONS[selectedItem.format] ?? <FileText className="h-5 w-5" />}</div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-base font-semibold text-gray-900 break-words">{selectedItem.title}</h2>
-                  {selectedItem.originalFileName && (
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">{selectedItem.originalFileName}</p>
-                  )}
-                </div>
+                ))}
               </div>
+            )}
 
-              {/* 基本信息 */}
-              <div className="space-y-2">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">基本信息</h3>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="text-gray-500">材料类型</div>
-                  <div className="font-medium">{MATERIAL_TYPE_LABELS[selectedItem.materialType] || selectedItem.materialType}</div>
-                  <div className="text-gray-500">经验源</div>
-                  <div className="font-medium">{EXP_SOURCE_LABELS[selectedItem.experienceSource] || selectedItem.experienceSource}</div>
-                  <div className="text-gray-500">格式</div>
-                  <div className="font-medium">{selectedItem.format}</div>
-                  <div className="text-gray-500">大小</div>
-                  <div className="font-medium">{formatFileSize(selectedItem.fileSize)}</div>
-                </div>
-              </div>
-
-              {/* 转换状态 */}
-              <div className="space-y-2">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">转换状态</h3>
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={selectedItem.conversionStatus} />
-                  {selectedItem.conversionStatus === "PENDING" && (
-                    <button
-                      onClick={() => startConversion.mutate({ id: selectedItem.id })}
-                      className="ml-auto flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
-                    >
-                      <Play className="h-3 w-3" /> 启动加工
-                    </button>
-                  )}
-                  {selectedItem.conversionStatus === "FAILED" && (
-                    <button
-                      onClick={() => startConversion.mutate({ id: selectedItem.id })}
-                      className="ml-auto flex items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs text-red-600 hover:bg-red-100"
-                    >
-                      <RotateCcw className="h-3 w-3" /> 重试
-                    </button>
-                  )}
-                  {selectedItem.conversionStatus === "CONVERTING" && (
-                    <span className="ml-auto text-xs text-blue-500 animate-pulse">转换中...</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Markdown 预览 */}
-              {selectedItem.conversionStatus === "CONVERTED" && selectedItem.markdownContent && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Markdown 预览</h3>
-                  <div className="rounded-lg border bg-gray-50 p-3 max-h-48 overflow-y-auto">
-                    <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
-                      {selectedItem.markdownContent.slice(0, 800)}
-                      {selectedItem.markdownContent.length > 800 && "\n\n..."}
-                    </pre>
-                  </div>
-                  <p className="text-xs text-gray-400">
-                    共 {selectedItem.markdownContent.length} 字
-                  </p>
-                </div>
-              )}
-
-              {/* 关联资产 */}
-              <div className="space-y-2">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">关联资产</h3>
-                <div className="flex gap-4 text-sm">
-                  <span className="text-gray-600">Atoms: <strong>{selectedItem._count?.atoms ?? 0}</strong></span>
-                  <span className="text-gray-600">QA: <strong>{selectedItem._count?.qaPairs ?? 0}</strong></span>
-                </div>
-              </div>
-
-              {/* 操作按钮 */}
-              <div className="flex flex-col gap-2 pt-2 border-t">
-                {selectedItem.conversionStatus === "CONVERTED" && (
-                  <button
-                    onClick={() => router.push("/knowledge/workbench?rawId=" + selectedItem.id)}
-                    className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm text-white hover:bg-blue-700 shadow-sm"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    进入知识加工工作台
-                  </button>
-                )}
-                <button
-                  onClick={() => {
-                    if (confirm("确定删除「" + selectedItem.title + "」？")) {
-                      deleteRaw.mutate({ id: selectedItem.id });
-                    }
-                  }}
-                  className="flex items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-500 hover:bg-red-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  删除素材
+            {/* 分页 */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 py-3 border-t">
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs text-gray-500">{page} / {totalPages}</span>
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30">
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400">
-              <Eye className="h-8 w-8 mb-2" />
-              <p className="text-sm">点击左侧素材查看详情</p>
-            </div>
-          )}
+            )}
+          </div>
+
+          {/* 右侧：详情面板 */}
+          <div className="w-[400px] shrink-0 overflow-y-auto bg-white">
+            {selectedItem ? (
+              <div className="p-5 space-y-5">
+                {/* 标题 */}
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5">{FORMAT_ICONS[selectedItem.format] ?? <FileText className="h-5 w-5" />}</div>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-base font-semibold text-gray-900 break-words">{selectedItem.title}</h2>
+                    {selectedItem.originalFileName && (
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">{selectedItem.originalFileName}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 基本信息 */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">基本信息</h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="text-gray-500">材料类型</div>
+                    <div className="font-medium">{MATERIAL_TYPE_LABELS[selectedItem.materialType] || selectedItem.materialType}</div>
+                    <div className="text-gray-500">经验源</div>
+                    <div className="font-medium">{EXP_SOURCE_LABELS[selectedItem.experienceSource] || selectedItem.experienceSource}</div>
+                    <div className="text-gray-500">格式</div>
+                    <div className="font-medium">{selectedItem.format}</div>
+                    <div className="text-gray-500">大小</div>
+                    <div className="font-medium">{formatFileSize(selectedItem.fileSize)}</div>
+                  </div>
+                </div>
+
+                {/* 转换状态 */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">转换状态</h3>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={selectedItem.conversionStatus} />
+                    {selectedItem.conversionStatus === "PENDING" && (
+                      <button
+                        onClick={() => startConversion.mutate({ id: selectedItem.id })}
+                        className="ml-auto flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+                      >
+                        <Play className="h-3 w-3" /> 启动加工
+                      </button>
+                    )}
+                    {selectedItem.conversionStatus === "FAILED" && (
+                      <button
+                        onClick={() => startConversion.mutate({ id: selectedItem.id })}
+                        className="ml-auto flex items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs text-red-600 hover:bg-red-100"
+                      >
+                        <RotateCcw className="h-3 w-3" /> 重试
+                      </button>
+                    )}
+                    {selectedItem.conversionStatus === "CONVERTING" && (
+                      <span className="ml-auto text-xs text-blue-500 animate-pulse">转换中...</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Markdown 预览 */}
+                {selectedItem.conversionStatus === "CONVERTED" && selectedItem.markdownContent && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Markdown 预览</h3>
+                    <div className="rounded-lg border bg-gray-50 p-3 max-h-48 overflow-y-auto">
+                      <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
+                        {selectedItem.markdownContent.slice(0, 800)}
+                        {selectedItem.markdownContent.length > 800 && "\n\n..."}
+                      </pre>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      共 {selectedItem.markdownContent.length} 字
+                    </p>
+                  </div>
+                )}
+
+                {/* 关联资产 */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">关联资产</h3>
+                  <div className="flex gap-4 text-sm">
+                    <span className="text-gray-600">Atoms: <strong>{selectedItem._count?.atoms ?? 0}</strong></span>
+                    <span className="text-gray-600">QA: <strong>{selectedItem._count?.qaPairs ?? 0}</strong></span>
+                  </div>
+                </div>
+
+                {/* 操作按钮 */}
+                <div className="flex flex-col gap-2 pt-2 border-t">
+                  {selectedItem.conversionStatus === "CONVERTED" && (
+                    <button
+                      onClick={() => router.push("/knowledge/workbench?rawId=" + selectedItem.id)}
+                      className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm text-white hover:bg-blue-700 shadow-sm"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      进入知识加工工作台
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (confirm("确定删除「" + selectedItem.title + "」？")) {
+                        deleteRaw.mutate({ id: selectedItem.id });
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-500 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    删除素材
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                <Eye className="h-8 w-8 mb-2" />
+                <p className="text-sm">点击左侧素材查看详情</p>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+      {viewMode === "card" && <div className="p-8 text-center text-gray-400">卡片视图（开发中）</div>}
+      {viewMode === "kanban" && <div className="p-8 text-center text-gray-400">看板视图（开发中）</div>}
 
       {/* Markdown 画廊区 */}
       {convertedItems.length > 0 && (
