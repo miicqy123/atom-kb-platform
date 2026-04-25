@@ -59,6 +59,7 @@ export default function RawMaterialsPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mdSearch, setMdSearch] = useState("");
+  const [editingItem, setEditingItem] = useState<any>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -369,12 +370,7 @@ export default function RawMaterialsPage() {
                     </button>
                   )}
                   <button
-                    onClick={() => {
-                      const newTitle = prompt("修改标题", selectedItem.title);
-                      if (newTitle && newTitle !== selectedItem.title) {
-                        updateRaw.mutate({ id: selectedItem.id, data: { title: newTitle } });
-                      }
-                    }}
+                    onClick={() => setEditingItem(selectedItem)}
                     className="flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
                   >
                     <FileText className="w-4 h-4" />
@@ -615,11 +611,18 @@ export default function RawMaterialsPage() {
           onSuccess={() => utils.raw.list.invalidate()}
         />
       )}
+      {editingItem && (
+        <EditMetadataModal
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
+          onSuccess={() => utils.raw.list.invalidate()}
+        />
+      )}
     </div>
   );
 }
 
-/* ========== 上传弹窗组件（保持现有功能不变） ========== */
+/* ========== 上传弹窗组件 ========== */
 function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const { currentProject } = useProjectStore();
   const createRaw = trpc.raw.create.useMutation({
@@ -765,6 +768,63 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {uploading ? "上传中..." : "上传并保存"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========== 编辑元数据弹窗 ========== */
+function EditMetadataModal({ item, onClose, onSuccess }: { item: any; onClose: () => void; onSuccess: () => void }) {
+  const updateRaw = trpc.raw.update.useMutation({
+    onSuccess: () => { onSuccess(); onClose(); },
+  });
+  const [form, setForm] = useState({
+    title: item.title,
+    materialType: item.materialType,
+    experienceSource: item.experienceSource,
+    exposureLevel: item.exposureLevel || "INTERNAL",
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">编辑元数据</h3>
+          <button onClick={onClose}><X className="w-5 h-5" /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">标题</label>
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">材料类型</label>
+            <select value={form.materialType} onChange={(e) => setForm({ ...form, materialType: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm">
+              {Object.entries(MATERIAL_TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">经验源</label>
+            <select value={form.experienceSource} onChange={(e) => setForm({ ...form, experienceSource: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm">
+              {Object.entries(EXP_SOURCE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">可对外等级</label>
+            <select value={form.exposureLevel} onChange={(e) => setForm({ ...form, exposureLevel: e.target.value })} className="w-full rounded-lg border px-3 py-2 text-sm">
+              <option value="INTERNAL">仅内部</option>
+              <option value="EXTERNAL">可对外</option>
+              <option value="NEEDS_APPROVAL">需审批</option>
+              <option value="STRICTLY_FORBIDDEN">严禁外发</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="rounded-lg border px-4 py-2 text-sm">取消</button>
+          <button onClick={() => updateRaw.mutate({ id: item.id, data: form })} className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">
+            {updateRaw.isLoading ? "保存中..." : "保存"}
           </button>
         </div>
       </div>
