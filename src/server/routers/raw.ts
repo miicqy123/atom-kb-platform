@@ -44,6 +44,15 @@ export const rawRouter = router({
       })
     ),
 
+  getByIds: publicProcedure
+    .input(z.object({ ids: z.array(z.string()) }))
+    .query(({ ctx, input }) =>
+      ctx.prisma.raw.findMany({
+        where: { id: { in: input.ids } },
+        include: { atoms: { take: 50 }, qaPairs: { take: 50 } },
+      })
+    ),
+
   create: publicProcedure
     .input(z.object({
       title: z.string(),

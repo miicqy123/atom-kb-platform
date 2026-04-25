@@ -62,6 +62,7 @@ export default function RawMaterialsPage() {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [previewItem, setPreviewItem] = useState<any>(null);
   const [addingToKb, setAddingToKb] = useState(false);
+  const [selectedMdIds, setSelectedMdIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -566,9 +567,32 @@ export default function RawMaterialsPage() {
         <div className="border-t bg-gray-50/50">
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">
-                已转换 Markdown（{convertedItems.length} 篇）
-              </h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-sm font-semibold text-gray-700">
+                  已转换 Markdown（{convertedItems.length} 篇）
+                </h2>
+                {selectedMdIds.size > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-blue-600 font-medium">已选 {selectedMdIds.size} 篇</span>
+                    <button
+                      onClick={() => {
+                        const ids = Array.from(selectedMdIds).join(",");
+                        router.push("/knowledge/workbench?rawIds=" + ids);
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      多选进入工作台
+                    </button>
+                    <button
+                      onClick={() => setSelectedMdIds(new Set())}
+                      className="text-xs text-gray-400 hover:text-gray-600"
+                    >
+                      取消选择
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
@@ -587,8 +611,20 @@ export default function RawMaterialsPage() {
                   className="rounded-xl border border-gray-200 bg-white p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group"
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    {FORMAT_ICONS[r.format] ?? <FileText className="h-4 w-4" />}
-                    <span className="text-sm font-medium text-gray-900 truncate">{r.title}</span>
+                    <input
+                      type="checkbox"
+                      checked={selectedMdIds.has(r.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        const next = new Set(selectedMdIds);
+                        if (e.target.checked) next.add(r.id);
+                        else next.delete(r.id);
+                        setSelectedMdIds(next);
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                    />
+                    <span className="text-xl shrink-0">{FORMAT_ICONS[r.format] ?? <FileText className="w-5 h-5" />}</span>
+                    <span className="font-medium text-sm truncate">{r.title}</span>
                   </div>
                   {r.markdownContent && (
                     <pre className="text-xs text-gray-500 whitespace-pre-wrap line-clamp-3 font-mono mb-2 leading-relaxed">
