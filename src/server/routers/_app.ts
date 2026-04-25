@@ -29,6 +29,8 @@ import { dimensionRouter } from './dimension';
 import { gatewayRouter } from './gateway';
 import { orchestrationRouter } from './orchestration';
 import { documentParseConfigRouter } from './document-parse-config';
+import { moduleRouter } from './module';
+import { packRouter } from './pack';
 
 export const appRouter = router({
   raw: rawRouter,
@@ -62,6 +64,8 @@ export const appRouter = router({
   gateway: gatewayRouter,
   orchestration: orchestrationRouter,
   documentParseConfig: documentParseConfigRouter,
+  module: moduleRouter,
+  pack: packRouter,
 });
 
 export type AppRouter = typeof appRouter;
