@@ -708,20 +708,12 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
         {/* 底部操作栏 */}
         <div className="shrink-0 flex items-center justify-between px-6 py-3 border-t bg-gray-50 rounded-b-2xl">
           <div className="flex items-center gap-2">
-            {item.conversionStatus === "PENDING" && onStartConversion && (
+            {!hasMarkdown && onStartConversion && (
               <button
                 onClick={onStartConversion}
                 className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-700"
               >
-                <Play className="w-3.5 h-3.5" /> 启动加工
-              </button>
-            )}
-            {item.conversionStatus === "FAILED" && onStartConversion && (
-              <button
-                onClick={onStartConversion}
-                className="flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-600 hover:bg-red-100"
-              >
-                <RotateCcw className="w-3.5 h-3.5" /> 重试转换
+                <RotateCcw className="w-3.5 h-3.5" /> 重新启动加工
               </button>
             )}
             {onEdit && (
