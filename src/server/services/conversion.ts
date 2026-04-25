@@ -35,18 +35,15 @@ function htmlToMarkdown(html: string): string {
 
 async function downloadBuffer(url: string): Promise<Buffer> {
   const headers: Record<string, string> = {};
-
-  // Vercel Blob private store needs authorization
   if (url.includes("blob.vercel-storage.com")) {
     const token = process.env.BLOB_READ_WRITE_TOKEN;
     if (token) {
       headers["Authorization"] = "Bearer " + token;
     }
   }
-
   const res = await fetch(url, { headers });
   if (!res.ok) {
-    throw new Error("Failed to download file: " + res.status + " " + res.statusText + " URL: " + url.slice(0, 100));
+    throw new Error("Download failed: " + res.status + " " + res.statusText);
   }
   const arrayBuf = await res.arrayBuffer();
   return Buffer.from(arrayBuf);

@@ -80,16 +80,10 @@ export const rawRouter = router({
     .mutation(async ({ ctx, input }) => {
       const raw = await ctx.prisma.raw.findUniqueOrThrow({ where: { id: input.id } });
       if (!raw.originalFileUrl) {
-        throw new Error("No file URL");
+        throw new Error("No file URL associated");
       }
-
-      try {
-        const { runConversion } = await import("@/server/services/conversion");
-        await runConversion(input.id);
-        return { success: true, message: "Conversion completed" };
-      } catch (err: any) {
-        console.error("Conversion failed:", err);
-        return { success: false, message: err.message || "Conversion failed" };
-      }
+      const { runConversion } = await import("@/server/services/conversion");
+      await runConversion(input.id);
+      return { success: true, message: "done" };
     }),
 });
