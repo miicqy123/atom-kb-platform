@@ -604,7 +604,7 @@ model ModelEndpoint {
 model ModelConfig {
   id            String   @id @default(cuid())
   tenantId      String?
-  scene         String   @unique
+  scene         String
   defaultModel  String
   fallbackModel String?
   temperature   Float    @default(0.3)
@@ -613,6 +613,8 @@ model ModelConfig {
   updatedAt     DateTime @updatedAt
   config        Json?
   tenant        Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@unique([scene, tenantId])
 }
 
 model DocumentParseConfig {
