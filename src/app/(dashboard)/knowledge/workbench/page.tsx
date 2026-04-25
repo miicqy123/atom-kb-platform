@@ -1,5 +1,5 @@
 ﻿"use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -69,7 +69,7 @@ const STATIONS = [
   { id: 6, name: "入库确认" },
 ];
 
-export default function WorkbenchPage() {
+function WorkbenchContent() {
   const { toast } = useToast();
   const { currentProject } = useProjectStore();
 
@@ -463,5 +463,13 @@ A: 从每平米成本来算，灵荃的价格仅比普通板材贵15%，但环�
         </div>
       </div>
     </div>
+  );
+}
+
+export default function WorkbenchPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400">加载中...</div>}>
+      <WorkbenchContent />
+    </Suspense>
   );
 }
