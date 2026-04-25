@@ -6,6 +6,11 @@ import { Textarea } from '@/components/ui/Textarea';
 import { trpc } from '@/lib/trpc';
 import { useToast } from '@/hooks/use-toast';
 import { AtomTagEditor } from './AtomTagEditor';
+import { Badge } from '@/components/ui/Badge';
+import {
+  CATEGORY_OPTIONS, getSubcategoryOptions,
+  CATEGORY_LABEL_MAP, SUBCATEGORY_LABEL_MAP,
+} from '@/lib/categoryMaps';
 
 interface AtomDialogProps {
   open: boolean;
@@ -25,6 +30,8 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
   const [status, setStatus] = useState<'DRAFT' | 'TESTING' | 'ACTIVE' | 'ARCHIVED'>('DRAFT');
   const [dimensions, setDimensions] = useState<number[]>([]);
   const [slotMappings, setSlotMappings] = useState<string[]>([]);
+  const [category, setCategory] = useState<string | null>(null);
+  const [subcategory, setSubcategory] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
   const { toast } = useToast();
@@ -87,6 +94,8 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
       setStatus(atom.status || 'DRAFT');
       setDimensions(atom.dimensions || []);
       setSlotMappings(atom.slotMappings || []);
+      setCategory(atom.category || null);
+      setSubcategory(atom.subcategory || null);
     } else {
       resetForm();
     }
@@ -102,6 +111,8 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
     setStatus('DRAFT');
     setDimensions([]);
     setSlotMappings([]);
+    setCategory(null);
+    setSubcategory(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -137,8 +148,10 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
         exposureLevel,
         status,
         dimensions,
-        slotMappings
-      });
+        slotMappings,
+        category: category || undefined,
+        subcategory: subcategory || undefined,
+      } as any);
     } else {
       // 创建新原子块
       createAtomMutation.mutate({
@@ -149,8 +162,10 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
         granularity,
         experienceSource,
         exposureLevel,
-        status
-      });
+        status,
+        category: category || undefined,
+        subcategory: subcategory || undefined,
+      } as any);
     }
   };
 
@@ -282,6 +297,61 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
               <option value="NEEDS_APPROVAL">需审批</option>
               <option value="STRICTLY_FORBIDDEN">严格禁止</option>
             </select>
+          </div>
+
+          {/* ── 内容分类 ── */}
+          <div className="border rounded-lg p-4 space-y-3">
+            <h4 className="text-sm font-semibold text-gray-600">内容分类</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+                  内容类别
+                </label>
+                <select
+                  id="category"
+                  value={category ?? ''}
+                  onChange={(e) => {
+                    setCategory(e.target.value || null);
+                    setSubcategory(null);
+                  }}
+                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand"
+                >
+                  <option value="">未分类</option>
+                  {CATEGORY_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="subcategory" className="block text-sm font-medium text-gray-700 mb-1">
+                  内容子类
+                </label>
+                <select
+                  id="subcategory"
+                  value={subcategory ?? ''}
+                  onChange={(e) => setSubcategory(e.target.value || null)}
+                  disabled={!category}
+                  className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand disabled:bg-gray-100 disabled:text-gray-400"
+                >
+                  <option value="">未分类</option>
+                  {getSubcategoryOptions(category || undefined).map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {/* 当前分类标签展示 */}
+            {category && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs text-gray-400">当前：</span>
+                <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">
+                  {CATEGORY_LABEL_MAP[category]}
+                </Badge>
+                {subcategory && (
+                  <span className="text-xs text-gray-500">/ {SUBCATEGORY_LABEL_MAP[subcategory]}</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 手动标注修正面板 - 仅在编辑模式下显示 */}
