@@ -602,12 +602,17 @@ model ModelEndpoint {
 }
 
 model ModelConfig {
-  id        String   @id @default(cuid())
-  tenantId  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  config    Json?
-  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+  id            String   @id @default(cuid())
+  tenantId      String?
+  scene         String   @unique
+  defaultModel  String
+  fallbackModel String?
+  temperature   Float    @default(0.3)
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  config        Json?
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id])
 }
 
 model DocumentParseConfig {

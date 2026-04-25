@@ -181,44 +181,112 @@ export async function* streamLLM(
   }
 }
 
-// ━━━ 新增：多模态调用（PDF/图片理解，通过 getClient 走 DashScope）━━━
-export async function callVisionLLM(options: {
-  imageUrl?: string;
-  imageBase64?: string;
-  prompt: string;
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 视觉模型调用（支持图片/PDF 等多模态输入）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** 视觉消息中的内容块 */
+export type VisionContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } };
+
+/** callVisionLLM 的选项 */
+export interface CallVisionLLMOptions {
+  /** 业务场景，用于从 ModelConfig 读取默认模型和温度 */
+  scene: LLMScene;
+  /** 系统提示词（可选，视觉场景有时不需要 system prompt） */
+  systemPrompt?: string;
+  /** 多模态内容块数组（文本 + 图片/PDF base64） */
+  content: VisionContentPart[];
+  /** 手动指定模型，覆盖 scene 默认值 */
   model?: string;
+  /** 最大输出 token 数 */
   maxTokens?: number;
-}): Promise<LLMResponse> {
-  const model = options.model || 'qwen-vl-ocr';
-  const client = getClient(model);
-  const parts: any[] = [];
+  /** 温度，覆盖 scene 默认值 */
+  temperature?: number;
+  /** 重试次数，默认 1 */
+  retries?: number;
+}
 
-  if (options.imageUrl) {
-    parts.push({ type: 'image_url', image_url: { url: options.imageUrl } });
-  } else if (options.imageBase64) {
-    parts.push({
-      type: 'image_url',
-      image_url: { url: `data:image/png;base64,${options.imageBase64}` },
-    });
+/**
+ * 调用视觉模型（qwen-vl-ocr / qwen-vl-plus 等）。
+ *
+ * 与 callLLM 的区别：
+ * - 支持 image_url 类型的多模态消息
+ * - 不强制要求 systemPrompt（视觉场景可省略）
+ * - 复用 getClient 客户端池和 getModelConfig 配置
+ */
+export async function callVisionLLM(
+  options: CallVisionLLMOptions,
+): Promise<LLMResponse> {
+  const {
+    scene,
+    systemPrompt,
+    content,
+    model: modelOverride,
+    maxTokens = 4096,
+    temperature: tempOverride,
+    retries = 1,
+  } = options;
+
+  // 1) 从 ModelConfig 读取场景配置（复用现有 getModelConfig 逻辑）
+  const config = await getModelConfig(scene);
+  const model = modelOverride ?? config?.model ?? 'qwen-vl-ocr';
+  const temperature = tempOverride ?? config?.temperature ?? 0.1;
+
+  // 2) 构建消息体
+  const messages: Array<{ role: 'system' | 'user'; content: string | VisionContentPart[] }> = [];
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt });
   }
-  parts.push({ type: 'text', text: options.prompt });
+  messages.push({ role: 'user', content });
 
-  const completion = await client.chat.completions.create({
-    model,
-    messages: [{ role: 'user', content: parts }],
-    temperature: 0.1,
-    max_tokens: options.maxTokens || 8192,
-  });
+  // 3) 调用（含重试）
+  let lastError: Error | null = null;
 
-  const content = completion.choices[0]?.message?.content || '';
-  const usage = completion.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-  return {
-    content: typeof content === 'string' ? content : JSON.stringify(content),
-    model,
-    tokenUsage: {
-      input: usage.prompt_tokens,
-      output: usage.completion_tokens,
-      total: usage.total_tokens,
-    },
-  };
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const client = getClient(model);
+      const startTime = Date.now();
+
+      const completion = await client.chat.completions.create({
+        model,
+        messages: messages as any,
+        max_tokens: maxTokens,
+        temperature,
+      });
+
+      const elapsed = Date.now() - startTime;
+      const choice = completion.choices[0];
+      const responseContent = choice?.message?.content || '';
+      const usage = completion.usage;
+
+      console.log(
+        `[VisionLLM] scene=${scene} model=${model} ` +
+        `tokens=${usage?.total_tokens ?? '?'} time=${elapsed}ms`
+      );
+
+      return {
+        content: typeof responseContent === 'string' ? responseContent : JSON.stringify(responseContent),
+        model,
+        tokenUsage: {
+          input: usage?.prompt_tokens ?? 0,
+          output: usage?.completion_tokens ?? 0,
+          total: usage?.total_tokens ?? 0,
+        },
+      };
+    } catch (e) {
+      lastError = e as Error;
+      if (attempt < retries - 1) {
+        console.warn(
+          `[VisionLLM] scene=${scene} model=${model} ` +
+          `attempt=${attempt + 1}/${retries} error=${lastError.message}, retrying...`
+        );
+      }
+    }
+  }
+
+  throw new Error(
+    `[VisionLLM] All attempts failed for scene="${scene}". Last error: ${lastError?.message}`
+  );
 }

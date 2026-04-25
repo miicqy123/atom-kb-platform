@@ -99,7 +99,35 @@ async function main() {
     },
   });
 
-  console.log(`Tenant created/updated: ${tenant.id}`);
+  // 创建默认模型配置
+  const modelScenes = [
+    { scene: "routing",           defaultModel: "qwen-turbo",   temperature: 0.3 },
+    { scene: "pre_check",         defaultModel: "qwen-turbo",   temperature: 0.3 },
+    { scene: "main_creative",     defaultModel: "qwen-max",     temperature: 0.75 },
+    { scene: "main_analytical",   defaultModel: "qwen-plus",    temperature: 0.3 },
+    { scene: "script",            defaultModel: "qwen-plus",    temperature: 0.5 },
+    { scene: "evaluation",        defaultModel: "qwen-plus",    temperature: 0.2 },
+    { scene: "planner",           defaultModel: "qwen-plus",    temperature: 0.3 },
+    { scene: "extraction",        defaultModel: "qwen-plus",    temperature: 0.2 },
+    { scene: "optimization",      defaultModel: "qwen-max",     temperature: 0.3 },
+    { scene: "clone",             defaultModel: "qwen-max",     temperature: 0.5 },
+    { scene: "pdf_conversion",    defaultModel: "qwen-vl-ocr",  fallbackModel: null,        temperature: 0.1 },
+    { scene: "image_understand",  defaultModel: "qwen-vl-plus", fallbackModel: "qwen-vl-ocr", temperature: 0.2 },
+    { scene: "classification",    defaultModel: "qwen-plus",    temperature: 0.0 },
+    { scene: "tagging",           defaultModel: "qwen-plus",    temperature: 0.0 },
+    { scene: "chunking",          defaultModel: "qwen-plus",    temperature: 0.2 },
+    { scene: "qa_generation",     defaultModel: "qwen-plus",    temperature: 0.3 },
+  ];
+
+  for (const cfg of modelScenes) {
+    await prisma.modelConfig.upsert({
+      where: { scene: cfg.scene },
+      update: { defaultModel: cfg.defaultModel, temperature: cfg.temperature, status: "active" },
+      create: { scene: cfg.scene, defaultModel: cfg.defaultModel, fallbackModel: cfg.fallbackModel ?? null, temperature: cfg.temperature, status: "active" },
+    });
+  }
+
+  console.log(`Model configs seeded: ${modelScenes.length}`);
   console.log(`Admin user created/updated: ${adminUser.email}`);
   console.log(`Admin password reset to: password123`);
   console.log(`Workspace created/updated: ${workspace.id}`);

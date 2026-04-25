@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import path from "path";
 import { parseDocument } from "./document-parse-service";
+import { callVisionLLM } from "./modelGateway";
 
 const prisma = new PrismaClient();
 
@@ -89,12 +90,45 @@ async function convertFileToMarkdown(filePath: string, format: string): Promise<
     }
 
     case "PDF": {
+      // ━━━ 方案 A：Qwen 视觉模型 OCR ━━━
       try {
-        const { markdown } = await parseDocument(buffer, "application/pdf", "PDF_EXTRACT");
-        if (markdown && markdown.length > 30) return markdown;
-        return "> PDF 内容为空，可能是扫描件。请尝试在后台切换为 AI OCR 模型。";
+        const base64 = buffer.toString("base64");
+        const result = await callVisionLLM({
+          scene: "pdf_conversion",
+          content: [
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:application/pdf;base64,${base64}`,
+              },
+            },
+            {
+              type: "text",
+              text: "Read all the text in this image/document. Output the complete content in Markdown format. Preserve headings, lists, tables, and paragraph structure.",
+            },
+          ],
+          maxTokens: 16000,
+          retries: 2,
+        });
+
+        const markdown = result.content;
+        if (markdown.length > 50) return markdown;
+        console.warn("[PDF] qwen-vl-ocr returned insufficient content, falling back to pdf-parse");
       } catch (e) {
-        return "> PDF 转换失败: " + (e as Error).message;
+        console.warn("[PDF] callVisionLLM failed, falling back to pdf-parse:", (e as Error).message);
+      }
+
+      // ━━━ 方案 B：降级到 pdf-parse 纯文本提取 ━━━
+      try {
+        const pdfParse = (await import("pdf-parse")).default;
+        const data = await pdfParse(buffer);
+        return data.text
+          .split("\n")
+          .map((l: string) => l.trim())
+          .filter((l: string) => l.length > 0)
+          .join("\n\n");
+      } catch (e2) {
+        return "> PDF parse failed: " + (e2 as Error).message;
       }
     }
 
