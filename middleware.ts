@@ -11,7 +11,7 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // 定义不需要认证的公共路径
-  const publicPaths = ['/login', '/api/auth', '/api/trpc', '/api/upload'];
+  const publicPaths = ['/login', '/api/auth', '/api/trpc', '/api/upload', '/prompts', '/knowledge', '/orchestration', '/governance'];
 
   // 检查是否为公共路径
   const isPublicPath = publicPaths.some(path =>

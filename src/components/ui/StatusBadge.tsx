@@ -16,6 +16,8 @@ const STATUS_MAP: Record<string, { label: string; className: string }> = {
   SUCCESS: { label: "成功", className: "bg-green-100 text-green-700" },
   DEGRADED: { label: "降级", className: "bg-orange-100 text-orange-700" },
   HUMAN_TAKEOVER: { label: "人工接管", className: "bg-purple-100 text-purple-700" },
+  REVIEW: { label: "审核中", className: "bg-blue-100 text-blue-700" },
+  APPROVED: { label: "已审核", className: "bg-green-100 text-green-700" },
 };
 
 export function StatusBadge({ status }: { status: string }) {

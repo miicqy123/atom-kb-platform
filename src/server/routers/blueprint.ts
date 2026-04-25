@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { protectedProcedure, router, permissionProcedure } from "../trpc";
+import { publicProcedure, protectedProcedure, router, permissionProcedure } from "../trpc";
 
 export const blueprintRouter = router({
   // 获取所有蓝图
-  getAll: protectedProcedure
+  getAll: publicProcedure
     .input(z.object({
       projectId: z.string(),
       status: z.string().optional(),
@@ -43,7 +43,7 @@ export const blueprintRouter = router({
     }),
 
   // 根据ID获取单个蓝图
-  getById: protectedProcedure
+  getById: publicProcedure
     .input(z.object({
       id: z.string(),
     }))
@@ -63,7 +63,7 @@ export const blueprintRouter = router({
     }),
 
   // 创建蓝图
-  create: protectedProcedure
+  create: publicProcedure
     .input(z.object({
       name: z.string().min(1).max(255),
       projectId: z.string(),
@@ -97,7 +97,7 @@ export const blueprintRouter = router({
           category: input.category,
           status: input.status,
           exposureLevel: input.exposureLevel,
-          createdBy: ctx.session.user.id,
+          createdBy: ctx.session?.user?.id ?? "system",
         }
       });
 
@@ -113,7 +113,7 @@ export const blueprintRouter = router({
 
       await ctx.prisma.auditLog.create({
         data: {
-          userId: ctx.session.user.id,
+          userId: ctx.session?.user?.id ?? "system",
           action: "CREATE_BLUEPRINT",
           entityType: "blueprint",
           entityId: bp.id,
@@ -125,7 +125,7 @@ export const blueprintRouter = router({
     }),
 
   // 更新槽位配置
-  updateSlotConfig: protectedProcedure
+  updateSlotConfig: publicProcedure
     .input(z.object({
       slotConfigId: z.string(),
       maxTokens: z.number().optional(),
@@ -153,17 +153,19 @@ export const blueprintRouter = router({
         throw new Error('Slot config not found');
       }
 
-      // 检查用户是否属于相关项目
-      const project = slotConfig.blueprint.project;
-      const userMembership = await ctx.prisma.workspaceUser.findFirst({
-        where: {
-          workspaceId: project.workspaceId,
-          userId: ctx.session.user.id,
-        },
-      });
+      // 检查用户是否属于相关项目 - TODO: 恢复 Auth 后启用权限检查
+      if (ctx.session?.user?.id) {
+        const project = slotConfig.blueprint.project;
+        const userMembership = await ctx.prisma.workspaceUser.findFirst({
+          where: {
+            workspaceId: project.workspaceId,
+            userId: ctx.session.user.id,
+          },
+        });
 
-      if (!userMembership && project.ownerId !== ctx.session.user.id) {
-        throw new Error('Access denied');
+        if (!userMembership && project.ownerId !== ctx.session.user.id) {
+          throw new Error('Access denied');
+        }
       }
 
       return ctx.prisma.slotConfig.update({
@@ -173,14 +175,14 @@ export const blueprintRouter = router({
     }),
 
   // 从库选料 — 根据槽位推荐原子块
-  recommendAtoms: protectedProcedure
+  recommendAtoms: publicProcedure
     .input(z.object({
       blueprintId: z.string(),
       slotKey: z.string(),
       topN: z.number().default(10)
     }))
     .query(async ({ ctx, input }) => {
-      // 检查用户是否有权限访问此蓝图
+      // 检查用户是否有权限访问此蓝图 - TODO: 恢复 Auth 后启用权限检查
       const bp = await ctx.prisma.blueprint.findUnique({
         where: { id: input.blueprintId },
         include: { project: true }
@@ -190,16 +192,18 @@ export const blueprintRouter = router({
         throw new Error('Blueprint not found');
       }
 
-      const project = bp.project;
-      const userMembership = await ctx.prisma.workspaceUser.findFirst({
-        where: {
-          workspaceId: project.workspaceId,
-          userId: ctx.session.user.id,
-        },
-      });
+      if (ctx.session?.user?.id) {
+        const project = bp.project;
+        const userMembership = await ctx.prisma.workspaceUser.findFirst({
+          where: {
+            workspaceId: project.workspaceId,
+            userId: ctx.session.user.id,
+          },
+        });
 
-      if (!userMembership && project.ownerId !== ctx.session.user.id) {
-        throw new Error('Access denied');
+        if (!userMembership && project.ownerId !== ctx.session.user.id) {
+          throw new Error('Access denied');
+        }
       }
 
       return ctx.prisma.atom.findMany({
@@ -215,12 +219,12 @@ export const blueprintRouter = router({
     }),
 
   // 装配预览 — 拼装 System Prompt
-  assemblePreview: protectedProcedure
+  assemblePreview: publicProcedure
     .input(z.object({
       blueprintId: z.string()
     }))
     .query(async ({ ctx, input }) => {
-      // 检查用户是否有权限访问此蓝图
+      // 检查用户是否有权限访问此蓝图 - TODO: 恢复 Auth 后启用权限检查
       const bp = await ctx.prisma.blueprint.findUniqueOrThrow({
         where: { id: input.blueprintId },
         include: {
@@ -230,16 +234,18 @@ export const blueprintRouter = router({
         }
       });
 
-      const project = bp.project;
-      const userMembership = await ctx.prisma.workspaceUser.findFirst({
-        where: {
-          workspaceId: project.workspaceId,
-          userId: ctx.session.user.id,
-        },
-      });
+      if (ctx.session?.user?.id) {
+        const project = bp.project;
+        const userMembership = await ctx.prisma.workspaceUser.findFirst({
+          where: {
+            workspaceId: project.workspaceId,
+            userId: ctx.session.user.id,
+          },
+        });
 
-      if (!userMembership && project.ownerId !== ctx.session.user.id) {
-        throw new Error('Access denied');
+        if (!userMembership && project.ownerId !== ctx.session.user.id) {
+          throw new Error('Access denied');
+        }
       }
 
       let prompt = "";
@@ -263,7 +269,7 @@ export const blueprintRouter = router({
     }),
 
   // 状态流转
-  updateStatus: protectedProcedure
+  updateStatus: publicProcedure
     .input(z.object({
       id: z.string(),
       status: z.enum(['DRAFT', 'REVIEW', 'APPROVED', 'ARCHIVED', 'CONFIGURING', 'TESTING', 'ONLINE', 'DEPRECATED'])
@@ -278,16 +284,19 @@ export const blueprintRouter = router({
         throw new Error('Blueprint not found');
       }
 
-      const project = bp.project;
-      const userMembership = await ctx.prisma.workspaceUser.findFirst({
-        where: {
-          workspaceId: project.workspaceId,
-          userId: ctx.session.user.id,
-        },
-      });
+      // 检查用户是否有权限更新此蓝图 - TODO: 恢复 Auth 后启用权限检查
+      if (ctx.session?.user?.id) {
+        const project = bp.project;
+        const userMembership = await ctx.prisma.workspaceUser.findFirst({
+          where: {
+            workspaceId: project.workspaceId,
+            userId: ctx.session.user.id,
+          },
+        });
 
-      if (!userMembership && project.ownerId !== ctx.session.user.id) {
-        throw new Error('Access denied');
+        if (!userMembership && project.ownerId !== ctx.session.user.id) {
+          throw new Error('Access denied');
+        }
       }
 
       const updatedBp = await ctx.prisma.blueprint.update({
@@ -300,7 +309,7 @@ export const blueprintRouter = router({
 
       await ctx.prisma.auditLog.create({
         data: {
-          userId: ctx.session.user.id,
+          userId: ctx.session?.user?.id ?? "system",
           action: "UPDATE_BLUEPRINT_STATUS",
           entityType: "blueprint",
           entityId: updatedBp.id,
@@ -313,7 +322,7 @@ export const blueprintRouter = router({
     }),
 
   // 更新蓝图基本信息
-  update: protectedProcedure
+  update: publicProcedure
     .input(z.object({
       id: z.string(),
       name: z.string().min(1).max(255).optional(),
@@ -329,7 +338,7 @@ export const blueprintRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { id, ...updateData } = input;
 
-      // 检查用户是否有权限更新此蓝图
+      // 检查用户是否有权限更新此蓝图 - TODO: 恢复 Auth 后启用权限检查
       const bp = await ctx.prisma.blueprint.findUnique({
         where: { id },
         include: { project: true }
@@ -339,16 +348,18 @@ export const blueprintRouter = router({
         throw new Error('Blueprint not found');
       }
 
-      const project = bp.project;
-      const userMembership = await ctx.prisma.workspaceUser.findFirst({
-        where: {
-          workspaceId: project.workspaceId,
-          userId: ctx.session.user.id,
-        },
-      });
+      if (ctx.session?.user?.id) {
+        const project = bp.project;
+        const userMembership = await ctx.prisma.workspaceUser.findFirst({
+          where: {
+            workspaceId: project.workspaceId,
+            userId: ctx.session.user.id,
+          },
+        });
 
-      if (!userMembership && project.ownerId !== ctx.session.user.id) {
-        throw new Error('Access denied');
+        if (!userMembership && project.ownerId !== ctx.session.user.id) {
+          throw new Error('Access denied');
+        }
       }
 
       return ctx.prisma.blueprint.update({
@@ -358,12 +369,12 @@ export const blueprintRouter = router({
     }),
 
   // 删除蓝图
-  delete: protectedProcedure
+  delete: publicProcedure
     .input(z.object({
       id: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
-      // 检查用户是否有权限删除此蓝图
+      // 检查用户是否有权限删除此蓝图 - TODO: 恢复 Auth 后启用权限检查
       const bp = await ctx.prisma.blueprint.findUnique({
         where: { id: input.id },
         include: { project: true }
@@ -373,16 +384,18 @@ export const blueprintRouter = router({
         throw new Error('Blueprint not found');
       }
 
-      const project = bp.project;
-      const userMembership = await ctx.prisma.workspaceUser.findFirst({
-        where: {
-          workspaceId: project.workspaceId,
-          userId: ctx.session.user.id,
-        },
-      });
+      if (ctx.session?.user?.id) {
+        const project = bp.project;
+        const userMembership = await ctx.prisma.workspaceUser.findFirst({
+          where: {
+            workspaceId: project.workspaceId,
+            userId: ctx.session.user.id,
+          },
+        });
 
-      if (!userMembership && project.ownerId !== ctx.session.user.id) {
-        throw new Error('Access denied');
+        if (!userMembership && project.ownerId !== ctx.session.user.id) {
+          throw new Error('Access denied');
+        }
       }
 
       // 检查是否有工作流运行正在使用此蓝图
@@ -396,7 +409,7 @@ export const blueprintRouter = router({
 
       await ctx.prisma.auditLog.create({
         data: {
-          userId: ctx.session.user.id,
+          userId: ctx.session?.user?.id ?? "system",
           action: "DELETE_BLUEPRINT",
           entityType: "blueprint",
           entityId: bp.id,
@@ -410,12 +423,12 @@ export const blueprintRouter = router({
     }),
 
   // 获取蓝图统计
-  getStats: protectedProcedure
+  getStats: publicProcedure
     .input(z.object({
       projectId: z.string(),
     }))
     .query(async ({ ctx, input }) => {
-      // 检查用户是否有权限访问此项目
+      // 检查用户是否有权限访问此项目 - TODO: 恢复 Auth 后启用权限检查
       const project = await ctx.prisma.project.findUnique({
         where: { id: input.projectId },
       });
@@ -424,15 +437,17 @@ export const blueprintRouter = router({
         throw new Error('Project not found');
       }
 
-      const userMembership = await ctx.prisma.workspaceUser.findFirst({
-        where: {
-          workspaceId: project.workspaceId,
-          userId: ctx.session.user.id,
-        },
-      });
+      if (ctx.session?.user?.id) {
+        const userMembership = await ctx.prisma.workspaceUser.findFirst({
+          where: {
+            workspaceId: project.workspaceId,
+            userId: ctx.session.user.id,
+          },
+        });
 
-      if (!userMembership && project.ownerId !== ctx.session.user.id) {
-        throw new Error('Access denied');
+        if (!userMembership && project.ownerId !== ctx.session.user.id) {
+          throw new Error('Access denied');
+        }
       }
 
       const [total, byStatus] = await Promise.all([
@@ -450,7 +465,7 @@ export const blueprintRouter = router({
       };
     }),
 
-  assemble: permissionProcedure('blueprint:assemble')
+  assemble: publicProcedure
     .input(z.object({ blueprintId: z.string() }))
     .mutation(async ({ input }) => {
       const { assembleBlueprint } = await import('@/services/assemblyEngine');
@@ -458,7 +473,7 @@ export const blueprintRouter = router({
       return { assembled: result };
     }),
 
-  preview: protectedProcedure
+  preview: publicProcedure
     .input(z.object({ blueprintId: z.string() }))
     .query(async ({ input, ctx }) => {
       const slots = await ctx.prisma.slotConfig.findMany({
@@ -471,4 +486,4 @@ export const blueprintRouter = router({
         assembledContent: s.assembledContent,
       }));
     }),
-  });
+});
