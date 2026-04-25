@@ -1,5 +1,6 @@
 // src/services/assemblyEngine.ts
 import { prisma } from '@/lib/prisma';
+import { matchThinkingModel, getThinkingPrompt } from './thinkingModelMatcher';
 
 const SLOT_ORDER = ['S0','S1','S2','S3','S4','S6','S5','S10','S7','S8','S9'];
 const LAYER_PRIORITY: Record<string, number> = { D: 4, C: 3, B: 2, A: 1 };
@@ -13,6 +14,18 @@ export async function assembleBlueprint(blueprintId: string): Promise<string> {
     },
   });
 
+  // 查询项目关联的任务以确定思考模型
+  const task = await prisma.task.findFirst({
+    where: { projectId: blueprint.projectId },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  let thinkingPrefix = '';
+  if (task) {
+    const thinkingModel = matchThinkingModel(task.type);
+    thinkingPrefix = getThinkingPrompt(thinkingModel);
+  }
+
   const sections: string[] = [];
 
   // 按标准槽位顺序装配
@@ -25,9 +38,14 @@ export async function assembleBlueprint(blueprintId: string): Promise<string> {
     const atoms = await fetchAtomsForSlot(slotConfig, blueprint.projectId);
     if (atoms.length === 0) continue;
 
-    const content = atoms
+    let content = atoms
       .map((a) => `[${a.layer}·${slotKey}] ${a.content}`)
       .join('\n\n');
+
+    // S5 槽位注入思考模型提示词
+    if (slotKey === 'S5' && thinkingPrefix) {
+      content = `${thinkingPrefix}\n\n${content}`;
+    }
 
     sections.push(`## ${slotKey}\n\n${content}`);
 
