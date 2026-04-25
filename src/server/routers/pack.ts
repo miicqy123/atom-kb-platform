@@ -19,12 +19,23 @@ export const packRouter = router({
           where, skip: input.offset, take: input.limit,
           orderBy: { updatedAt: 'desc' },
           include: {
-            modules: { include: { module: { select: { id: true, name: true } } } },
+            modules: { include: { module: { select: { id: true, name: true, atoms: { select: { atomId: true } } } } } },
           },
         }),
         ctx.prisma.pack.count({ where }),
       ]);
       return { items, totalCount: total };
+    }),
+
+  getById: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.prisma.pack.findUnique({
+        where: { id: input.id },
+        include: {
+          modules: { include: { module: { select: { id: true, name: true } } } },
+        },
+      });
     }),
 
   create: protectedProcedure
@@ -49,6 +60,27 @@ export const packRouter = router({
           modules: { create: input.moduleIds.map(m => ({ moduleId: m.moduleId, order: m.order })) },
         },
       });
+    }),
+
+  update: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      taskTypes: z.array(z.string()).optional(),
+      platforms: z.array(z.string()).optional(),
+      audiences: z.array(z.string()).optional(),
+      moduleIds: z.array(z.object({ moduleId: z.string(), order: z.number().default(0) })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { id, moduleIds, ...data } = input;
+      if (moduleIds) {
+        await ctx.prisma.packModule.deleteMany({ where: { packId: id } });
+        await ctx.prisma.packModule.createMany({
+          data: moduleIds.map(m => ({ packId: id, moduleId: m.moduleId, order: m.order })),
+        });
+      }
+      return ctx.prisma.pack.update({ where: { id }, data });
     }),
 
   // 按路由条件匹配场景包
