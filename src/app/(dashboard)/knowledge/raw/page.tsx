@@ -9,7 +9,7 @@ import {
   Upload, Search, FileText, FileSpreadsheet, Headphones, Image, Globe,
   Trash2, Eye, RotateCcw, X, AlertCircle, ChevronLeft, ChevronRight,
   Play, ExternalLink, File, Presentation, Building2, Edit, LayoutList,
-  LayoutGrid, Columns3
+  LayoutGrid, Columns3, Copy
 } from "lucide-react";
 
 // ===================== 常量 =====================
@@ -610,6 +610,22 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
     hasMarkdown ? "markdown" : "original"
   );
 
+  const handleCopy = async () => {
+    const text = item.markdownContent || item.title || "";
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("已拷贝到剪贴板！");
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      alert("已拷贝到剪贴板！");
+    }
+  };
+
   // 根据文件格式决定原件预览方式
   const renderOriginalPreview = () => {
     if (!item.originalFileUrl) {
@@ -621,17 +637,30 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
       );
     }
 
-    const previewUrl = `/api/blob-preview?url=${encodeURIComponent(item.originalFileUrl)}`;
+    // 优先直接使用原始 URL（Vercel Blob URL 通常是公开的）
+    const previewUrl = item.originalFileUrl;
     const format = (item.format || "").toUpperCase();
 
     // PDF - 浏览器原生 PDF 阅读器
     if (format === "PDF") {
       return (
-        <iframe
-          src={previewUrl}
-          className="w-full h-full border-0 rounded-lg"
-          title="PDF 预览"
-        />
+        <div className="w-full h-full flex flex-col">
+          <iframe
+            src={previewUrl}
+            className="w-full flex-1 border-0 rounded-lg"
+            title="PDF 预览"
+          />
+          <div className="flex items-center justify-center pt-2">
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-blue-600 hover:text-blue-700"
+            >
+              无法预览？点此在新窗口打开 ↗
+            </a>
+          </div>
+        </div>
       );
     }
 
@@ -644,15 +673,17 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
             src={officeViewerUrl}
             className="w-full flex-1 border-0 rounded-lg"
             title="Office 文档预览"
+            onError={() => console.log("Office preview failed")}
           />
           <div className="flex items-center justify-center gap-3 pt-3">
+            <span className="text-xs text-gray-400">预览由 Microsoft Office Online 提供</span>
             <a
               href={previewUrl}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-blue-600 hover:text-blue-700"
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
             >
-              如预览失败，点此直接下载/打开 ↗
+              无法预览？点此直接下载 ↗
             </a>
           </div>
         </div>
@@ -753,7 +784,7 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
             <div className="flex items-center gap-2 shrink-0">
               {item.originalFileUrl && (
                 <a
-                  href={`/api/blob-preview?url=${encodeURIComponent(item.originalFileUrl)}`}
+                  href={item.originalFileUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-50"
@@ -844,6 +875,12 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
                 <Trash2 className="w-3.5 h-3.5" /> 删除
               </button>
             )}
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-600 hover:bg-gray-100"
+            >
+              <Copy className="w-3.5 h-3.5" /> 拷贝内容
+            </button>
           </div>
           <div className="flex items-center gap-2">
             {item.conversionStatus === "CONVERTED" && onAddToKb && (
