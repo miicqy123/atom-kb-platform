@@ -66,7 +66,6 @@ export default function RawMaterialsPage() {
   const [addingToKb, setAddingToKb] = useState(false);
   const [selectedMdIds, setSelectedMdIds] = useState<Set<string>>(new Set());
   const [showSurvey, setShowSurvey] = useState(false);
-  const [surveySubmitting, setSurveySubmitting] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -110,48 +109,23 @@ export default function RawMaterialsPage() {
     onError: () => alert("添加失败，请重试"),
   });
 
-  const createRaw = trpc.raw.create.useMutation({
-    onSuccess: () => utils.raw.list.invalidate(),
-  });
-
-  const handleSurveySubmit = async (surveyData: SurveyData) => {
-    if (!currentProject) {
-      alert("请先选择项目");
-      return;
-    }
-    setSurveySubmitting(true);
-    try {
-      const markdown = surveyToMarkdown(surveyData);
-      await createRaw.mutateAsync({
-        title: (surveyData.companyName || "企业调研") + " — 企业调研报告",
-        projectId: currentProject.id,
-        format: "WORD",
-        materialType: "INTERNAL_WIKI",
-        experienceSource: "E1_COMPANY",
-      });
-      const newItems = await utils.raw.list.fetch({
-        projectId: currentProject.id,
-        page: 1,
-        search: surveyData.companyName,
-      });
-      const created = newItems?.items?.[0];
-      if (created) {
-        await updateRaw.mutateAsync({
-          id: created.id,
-          data: {
-            markdownContent: markdown,
-            conversionStatus: "CONVERTED",
-          },
-        });
-      }
+  const createFromSurvey = trpc.raw.createFromSurvey.useMutation({
+    onSuccess: () => {
       utils.raw.list.invalidate();
       setShowSurvey(false);
       alert("企业调研已保存到素材库！");
-    } catch (err: any) {
-      alert("保存失败: " + (err.message || "未知错误"));
-    } finally {
-      setSurveySubmitting(false);
-    }
+    },
+    onError: (err) => alert("保存失败: " + err.message),
+  });
+
+  const handleSurveySubmit = async (surveyData: SurveyData) => {
+    if (!currentProject) { alert("请先选择项目"); return; }
+    const markdown = surveyToMarkdown(surveyData);
+    createFromSurvey.mutate({
+      projectId: currentProject.id,
+      title: (surveyData.companyName || "企业调研") + " — 企业调研报告",
+      markdownContent: markdown,
+    });
   };
 
   const items: any[] = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
@@ -777,7 +751,7 @@ export default function RawMaterialsPage() {
           open={showSurvey}
           onClose={() => setShowSurvey(false)}
           onSubmit={handleSurveySubmit}
-          submitting={surveySubmitting}
+          submitting={createFromSurvey.isPending}
         />
       )}
       {/* 上传弹窗 */}

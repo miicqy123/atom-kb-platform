@@ -109,6 +109,31 @@ export const rawRouter = router({
       return atom;
     }),
 
+  createFromSurvey: publicProcedure
+    .input(z.object({
+      projectId: z.string(),
+      title: z.string(),
+      markdownContent: z.string(),
+      materialType: z.string().default("INTERNAL_WIKI"),
+      experienceSource: z.string().default("E1_COMPANY"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const raw = await ctx.prisma.raw.create({
+        data: {
+          title: input.title,
+          projectId: input.projectId,
+          format: "WORD" as any,
+          materialType: (input.materialType || "INTERNAL_WIKI") as any,
+          experienceSource: (input.experienceSource || "E1_COMPANY") as any,
+          markdownContent: input.markdownContent,
+          conversionStatus: "CONVERTED" as any,
+          verificationStatus: "unverified",
+          exposureLevel: "INTERNAL",
+        },
+      });
+      return raw;
+    }),
+
   startConversion: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
