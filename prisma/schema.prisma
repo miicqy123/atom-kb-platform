@@ -140,6 +140,8 @@ model Atom {
   dimensions       Int[]
   slotMappings     String[]
   experienceSource ExperienceSource
+  category         ContentCategory?
+  subcategory      ContentSubCategory?
   exposureLevel    ExposureLevel    @default(INTERNAL)
   scenarios        Json?
   status           AssetStatus      @default(DRAFT)
@@ -161,6 +163,7 @@ model Atom {
 
   @@index([projectId, status, layer])
   @@index([dimensions])
+  @@index([projectId, category, subcategory])
 }
 
 model QAPair {
@@ -791,4 +794,48 @@ enum QADifficulty {
   BEGINNER
   INTERMEDIATE
   PROFESSIONAL
+}
+
+// 内容类别（第二层分类）
+enum ContentCategory {
+  CAT_WHO    // 身份与受众
+  CAT_WHAT   // 产品与卖点
+  CAT_HOW    // 方法与流程
+  CAT_STYLE  // 风格与表达
+  CAT_FENCE  // 红线与合规
+  CAT_PROOF  // 证据与案例
+}
+
+// 内容子类别（第三层分类）
+enum ContentSubCategory {
+  // 身份与受众
+  WHO_BRAND      // 品牌定位
+  WHO_ROLE       // 角色人格
+  WHO_AUDIENCE   // 受众画像
+  WHO_TERM       // 术语规范
+  // 产品与卖点
+  WHAT_PRODUCT   // 产品信息
+  WHAT_USP       // 差异卖点
+  WHAT_PRICE     // 价格体系
+  WHAT_CERT      // 权威背书
+  // 方法与流程
+  HOW_SOP        // 标准流程
+  HOW_METHOD     // 方法论框架
+  HOW_TACTIC     // 技巧策略
+  HOW_BEST       // 最佳实践
+  // 风格与表达
+  STYLE_HOOK     // 钩子库
+  STYLE_WORD     // 词库
+  STYLE_TONE     // 语言风格
+  STYLE_RHYTHM   // 结构节奏
+  // 红线与合规
+  FENCE_BAN      // 禁用清单
+  FENCE_ALLOW    // 可用白名单
+  FENCE_LAW      // 法规合规
+  FENCE_BLUR     // 模糊处理
+  // 证据与案例
+  PROOF_CASE     // 成功案例
+  PROOF_DATA     // 数据报告
+  PROOF_FAIL     // 反面教训
+  PROOF_COMPARE  // 对比分析
 }
