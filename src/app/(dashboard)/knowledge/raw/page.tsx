@@ -333,7 +333,7 @@ export default function RawMaterialsPage() {
                   <div className="flex gap-2 mt-2">
                     {selectedItem.originalFileUrl && (
                       <a
-                        href={selectedItem.originalFileUrl}
+                        href={`/api/blob-preview?url=${encodeURIComponent(selectedItem.originalFileUrl)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
