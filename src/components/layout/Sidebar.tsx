@@ -12,6 +12,7 @@ const NAV_SECTIONS = [
       { label: "Raw 素材管理", href: "/knowledge/raw" },
       { label: "知识加工工作台", href: "/knowledge/workbench" },
       { label: "原子块浏览器", href: "/knowledge/atoms" },
+      { label: "模块管理", href: "/modules" },
       { label: "QA 数据集", href: "/knowledge/qa-pairs" },
       { label: "分类树与标签", href: "/knowledge/taxonomy" },
       { label: "映射视图", href: "/knowledge/mappings" },
