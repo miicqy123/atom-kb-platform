@@ -85,7 +85,7 @@ export default function SystemConfigurationPage() {
         <div className="space-y-2">
           {LAYERS.map(l => (
             <div key={l.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border">
-              <span className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style= background: l.color >{l.id}</span>
+              <span className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ background: l.color }}>{l.id}</span>
               <div className="flex-1">
                 <div className="text-sm font-medium">{l.name}</div>
                 <div className="text-xs text-gray-500">{l.desc}</div>
@@ -157,7 +157,7 @@ export default function SystemConfigurationPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader title="系统配置" description="管理标签体系、引擎参数和系统设置"
-        action={<Button onClick={() => toast({ title: "配置已保存" })} className="bg-brand text-white gap-2"><Check className="h-4 w-4" /> 保存配置</Button>}
+        actions={<Button onClick={() => toast({ title: "配置已保存" })} className="bg-brand text-white gap-2"><Check className="h-4 w-4" /> 保存配置</Button>}
       />
 
       <div className="flex flex-1 overflow-hidden">

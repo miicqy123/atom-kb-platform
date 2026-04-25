@@ -49,7 +49,7 @@ export default function ProjectManagementPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader title="Project 管理" description="管理项目、查看资产概览和运行统计"
-        action={<Button className="gap-2 bg-brand text-white"><Plus className="h-4 w-4" /> 新建 Project</Button>}
+        actions={<Button className="gap-2 bg-brand text-white"><Plus className="h-4 w-4" /> 新建 Project</Button>}
       />
 
       {/* 项目列表 */}
@@ -61,7 +61,7 @@ export default function ProjectManagementPage() {
               className="h-9 w-full rounded-lg border pl-9 pr-4 text-sm" />
           </div>
           <div className="flex gap-2">
-            {(projects ?? [{ id: "p1", name: "万华灵荃3.0", status: "ACTIVE" }, { id: "p2", name: "某教育项目", status: "ACTIVE" }]).map((p: any) => (
+            {(projects?.items ?? [{ id: "p1", name: "万华灵荃3.0", status: "ACTIVE" }, { id: "p2", name: "某教育项目", status: "ACTIVE" }]).map((p: any) => (
               <button key={p.id} onClick={() => setSelectedProject(p.id)}
                 className={`px-4 py-2 rounded-lg text-sm transition ${
                   selectedProject === p.id ? "bg-brand text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -88,10 +88,10 @@ export default function ProjectManagementPage() {
             <div className="flex items-center gap-2 text-xs text-gray-500 mb-1"><DbIcon className="h-4 w-4" /> Atoms</div>
             <div className="text-2xl font-bold">{d.stats.atoms.total} 条</div>
             <div className="grid grid-cols-2 gap-1 text-[10px] mt-1">
-              <span style= color:"#6366f1" >A:{d.stats.atoms.A}</span>
-              <span style= color:"#06b6d4" >B:{d.stats.atoms.B}</span>
-              <span style= color:"#f97316" >C:{d.stats.atoms.C}</span>
-              <span style= color:"#8b5cf6" >D:{d.stats.atoms.D}</span>
+              <span style={{ color: "#6366f1" }}>A:{d.stats.atoms.A}</span>
+              <span style={{ color: "#06b6d4" }}>B:{d.stats.atoms.B}</span>
+              <span style={{ color: "#f97316" }}>C:{d.stats.atoms.C}</span>
+              <span style={{ color: "#8b5cf6" }}>D:{d.stats.atoms.D}</span>
             </div>
           </div>
           <div className="border rounded-xl p-4 bg-white">
@@ -124,10 +124,10 @@ export default function ProjectManagementPage() {
             <thead>
               <tr className="bg-gray-50 text-xs text-gray-500">
                 <th className="px-4 py-2 text-left">维度</th>
-                <th className="px-4 py-2 text-center" style= color:"#6366f1" >🅰️A</th>
-                <th className="px-4 py-2 text-center" style= color:"#06b6d4" >🅱️B</th>
-                <th className="px-4 py-2 text-center" style= color:"#f97316" >🅲C</th>
-                <th className="px-4 py-2 text-center" style= color:"#8b5cf6" >🅳D</th>
+                <th className="px-4 py-2 text-center" style={{ color: "#6366f1" }}>🅰️A</th>
+                <th className="px-4 py-2 text-center" style={{ color: "#06b6d4" }}>🅱️B</th>
+                <th className="px-4 py-2 text-center" style={{ color: "#f97316" }}>🅲C</th>
+                <th className="px-4 py-2 text-center" style={{ color: "#8b5cf6" }}>🅳D</th>
               </tr>
             </thead>
             <tbody className="divide-y">

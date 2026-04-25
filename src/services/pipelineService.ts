@@ -12,8 +12,8 @@ export async function normalizeToMarkdown(
   switch (format) {
     case 'PDF': {
       try {
-        const pdfParse = (await import('pdf-parse')).default;
-        const data = await pdfParse(buffer);
+        const module = await import('pdf-parse');
+        const data = await module.default(buffer);
         return data.text;
       } catch (e) {
         console.warn('[Pipeline] pdf-parse not available:', e);

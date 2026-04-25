@@ -55,7 +55,7 @@ export default function RawMaterialsPage() {
   /* ── 加工 ── */
   const processMut = trpc.pipeline.processRaw.useMutation({
     onSuccess: (d) => {
-      toast({ title:`加工完成`, description:`生成 ${d.atomsCreated ?? 0} 个原子块，${d.qaCreated ?? 0} 个QA对` });
+      toast({ title:`加工完成`, description:`生成 ${d.atomsCreated ?? 0} 个原子块` });
       utils.raw.getAll.invalidate();
     },
     onError: (e) => toast({ title:"加工失败", description:e.message, variant:"destructive" }),
@@ -106,7 +106,7 @@ export default function RawMaterialsPage() {
       <PageHeader
         title="Raw 素材管理"
         description="管理原始知识素材，支持上传、转换、加工"
-        action={
+        actions={
           <Button onClick={() => setIsUploadOpen(true)} className="gap-2 bg-brand text-white">
             <Upload className="h-4 w-4" /> 上传素材
           </Button>
@@ -276,21 +276,21 @@ export default function RawMaterialsPage() {
             {/* 关联 */}
             <div className="p-4 space-y-2">
               <details className="group">
-                <summary className="text-xs font-semibold text-gray-700 cursor-pointer">▸ 关联 Atoms（{selected.atoms?.length ?? 0} 条）</summary>
+                <summary className="text-xs font-semibold text-gray-700 cursor-pointer">▸ 关联 Atoms（{(selected as any)?.atoms?.length ?? 0} 条）</summary>
                 <div className="mt-2 space-y-1 pl-3">
-                  {(selected.atoms ?? []).map((a:any) => (
+                  {((selected as any)?.atoms ?? []).map((a:any) => (
                     <div key={a.id} className="text-xs text-gray-600">• {a.title}</div>
                   ))}
-                  {!(selected.atoms?.length) && <div className="text-xs text-gray-400">暂无关联</div>}
+                  {!(selected as any)?.atoms?.length && <div className="text-xs text-gray-400">暂无关联</div>}
                 </div>
               </details>
               <details className="group">
-                <summary className="text-xs font-semibold text-gray-700 cursor-pointer">▸ 关联 QA Pairs（{selected.qaPairs?.length ?? 0} 组）</summary>
+                <summary className="text-xs font-semibold text-gray-700 cursor-pointer">▸ 关联 QA Pairs（{(selected as any)?.qaPairs?.length ?? 0} 组）</summary>
                 <div className="mt-2 space-y-1 pl-3">
-                  {(selected.qaPairs ?? []).map((q:any) => (
+                  {((selected as any)?.qaPairs ?? []).map((q:any) => (
                     <div key={q.id} className="text-xs text-gray-600">• {q.question?.slice(0,40)}</div>
                   ))}
-                  {!(selected.qaPairs?.length) && <div className="text-xs text-gray-400">暂无关联</div>}
+                  {!(selected as any)?.qaPairs?.length && <div className="text-xs text-gray-400">暂无关联</div>}
                 </div>
               </details>
             </div>

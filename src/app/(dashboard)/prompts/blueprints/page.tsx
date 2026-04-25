@@ -40,7 +40,7 @@ export default function BlueprintsPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader title="蓝图库" description="管理和配置提示词蓝图"
-        action={
+        actions={
           <Button onClick={() => createMut.mutate({ name: "新蓝图", projectId: projectId!, description: "" })}
             disabled={!projectId || createMut.isPending} className="gap-2 bg-brand text-white">
             <Plus className="h-4 w-4" /> {createMut.isPending ? "创建中…" : "新建蓝图"}
@@ -117,7 +117,7 @@ export default function BlueprintsPage() {
         )}
       </div>
 
-      {data && <div className="px-6 pb-4"><Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} /></div>}
+      {data && <div className="px-6 pb-4"><Pagination page={page} totalPages={totalPages} onChange={setPage} /></div>}
     </div>
   );
 }

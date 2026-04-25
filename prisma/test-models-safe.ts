@@ -9,8 +9,8 @@ async function testModels() {
   console.log('Testing raw:', typeof prisma.raw?.create);
   console.log('Testing atom:', typeof prisma.atom?.create);
 
-  // According to the schema, it's QAPair, which should become qaPair in the client
-  console.log('Testing qaPair (from QAPair model):', typeof prisma.qaPair?.create);
+  // According to the schema, it's QAPair, which should become qAPair in the client
+  console.log('Testing qAPair (from QAPair model):', typeof prisma.qAPair?.create);
 
   console.log('Testing blueprint:', typeof prisma.blueprint?.create);
   console.log('Testing agent:', typeof prisma.agent?.create);

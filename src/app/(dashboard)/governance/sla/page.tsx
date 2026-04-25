@@ -107,7 +107,7 @@ export default function SLAMonitoringPage() {
               {/* 迷你趋势图 */}
               <div className="mt-4 pt-3 border-t flex items-center justify-between">
                 <span className="text-xs text-gray-400">7d 趋势</span>
-                <span className="text-lg tracking-widest" style= fontFamily: "monospace" >{role.spark}</span>
+                <span className="text-lg tracking-widest" style={{ fontFamily: "monospace" }}>{role.spark}</span>
               </div>
             </div>
           ))}

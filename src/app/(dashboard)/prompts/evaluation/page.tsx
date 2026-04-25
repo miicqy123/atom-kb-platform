@@ -85,12 +85,12 @@ export default function EvaluationPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={TREND_DATA}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="run" tick= fontSize: 12  />
-                    <YAxis domain={[60, 100]} tick= fontSize: 12  />
+                    <XAxis dataKey="run" tick={{ fontSize: 12 }} />
+                    <YAxis domain={[60, 100]} tick={{ fontSize: 12 }} />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="s9" stroke="#1a56db" strokeWidth={2} name="S9 综合" dot= r: 4  />
-                    <Line type="monotone" dataKey="s8" stroke="#10b981" strokeWidth={2} name="S8 通过率" dot= r: 4  />
+                    <Line type="monotone" dataKey="s9" stroke="#1a56db" strokeWidth={2} name="S9 综合" dot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="s8" stroke="#10b981" strokeWidth={2} name="S8 通过率" dot={{ r: 4 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -104,7 +104,7 @@ export default function EvaluationPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <RadarChart data={RADAR_DATA}>
                       <PolarGrid />
-                      <PolarAngleAxis dataKey="dim" tick= fontSize: 11  />
+                      <PolarAngleAxis dataKey="dim" tick={{ fontSize: 11 }} />
                       <Radar name="当前版本" dataKey="current" stroke="#1a56db" fill="#1a56db" fillOpacity={0.2} />
                       <Radar name="上一版本" dataKey="prev" stroke="#9ca3af" fill="#9ca3af" fillOpacity={0.1} />
                       <Legend />
@@ -122,7 +122,7 @@ export default function EvaluationPage() {
                     <span className="font-bold">95%</span>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-3">
-                    <div className="h-full bg-green-500 rounded-full" style= width: "95%"  />
+                    <div className="h-full bg-green-500 rounded-full" style={{ width: "95%" }} />
                   </div>
                   <div className="text-xs text-gray-400 mt-1">95 / 100 通过</div>
                 </div>

@@ -114,7 +114,7 @@ export default function TaxonomyPage() {
                   <button onClick={() => toggleLayer(layer.id)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg hover:bg-white transition">
                     <ChevronRight className={`h-3.5 w-3.5 text-gray-400 transition-transform ${expandedLayers.includes(layer.id) ? "rotate-90" : ""}`} />
-                    <span style= color: layer.color >{layer.icon} {layer.name}</span>
+                    <span style={{ color: layer.color }}>{layer.icon} {layer.name}</span>
                   </button>
 
                   {expandedLayers.includes(layer.id) && (TREE_DATA[layer.id] || []).map(dim => (

@@ -22,8 +22,8 @@ async function extractWordText(buffer: ArrayBuffer) {
 async function extractPdfText(buffer: ArrayBuffer) {
   try {
     // 在服务器环境中使用 require
-    const pdfParse = (await import('pdf-parse')).default;
-    const pdfData = await pdfParse(Buffer.from(buffer));
+    const module = await import('pdf-parse');
+    const pdfData = await module.default(Buffer.from(buffer));
     return pdfData.text;
   } catch (error) {
     console.error('Error parsing PDF:', error);

@@ -8,7 +8,7 @@ async function testModels() {
   // 测试各种模型是否可以访问
   console.log('Testing raw:', typeof prisma.raw.create);
   console.log('Testing atom:', typeof prisma.atom.create);
-  console.log('Testing qaPair:', typeof prisma.qaPair.create);
+  console.log('Testing qAPair:', typeof prisma.qAPair.create);
   console.log('Testing blueprint:', typeof prisma.blueprint.create);
   console.log('Testing agent:', typeof prisma.agent.create);
   console.log('Testing workflowRun:', typeof prisma.workflowRun.create);

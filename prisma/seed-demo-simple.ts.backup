@@ -48,7 +48,7 @@ async function main() {
     await prisma.atomBlueprint.deleteMany({ where: { blueprint: { projectId: projectId } } });
     await prisma.agent.deleteMany({ where: { projectId: projectId } });
     await prisma.blueprint.deleteMany({ where: { projectId: projectId } });
-    await prisma.qaPair.deleteMany({ where: { projectId: projectId } });
+    await prisma.qAPair.deleteMany({ where: { projectId: projectId } });
     await prisma.atom.deleteMany({ where: { projectId: projectId } });
     await prisma.raw.deleteMany({ where: { projectId: projectId } });
     await prisma.apiKey.deleteMany({ where: { projectId: projectId } });
@@ -151,7 +151,7 @@ async function main() {
   const createdQaPairs = [];
   for (const qa of qaPairs) {
     try {
-      const createdQa = await prisma.qaPair.create({ data: qa });
+      const createdQa = await prisma.qAPair.create({ data: qa });
       createdQaPairs.push(createdQa);
       console.log(`创建了QA对: ${qa.question}`);
     } catch (e) {

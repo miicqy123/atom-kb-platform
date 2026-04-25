@@ -8,8 +8,8 @@ async function testModels() {
   // Testing models with correct casing based on schema
   console.log('Testing raw:', typeof prisma.raw.create);
   console.log('Testing atom:', typeof prisma.atom.create);
-  console.log('Testing qaPair (should be QAPair):', typeof prisma.qaPair?.create);
-  console.log('Testing QAPair (correct name):', typeof prisma.qaPair.create); // Actually QAPair in schema
+  console.log('Testing qAPair (correct name from QAPair model):', typeof prisma.qAPair?.create); // From QAPair
+  console.log('Testing qAPair (correct name):', typeof prisma.qAPair.create); // From QAPair in schema
   console.log('Testing blueprint:', typeof prisma.blueprint.create);
   console.log('Testing agent:', typeof prisma.agent.create);
   console.log('Testing workflowRun:', typeof prisma.workflowRun.create);

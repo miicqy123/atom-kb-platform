@@ -88,7 +88,7 @@ export default function UserAndRoleManagementPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader title="用户与角色管理" description="管理系统用户和权限矩阵"
-        action={activeTab==="users" ? (
+        actions={activeTab==="users" ? (
           <Button onClick={()=>setShowCreate(true)} className="gap-2 bg-brand text-white"><Plus className="h-4 w-4" /> 邀请用户</Button>
         ) : null}
       />
@@ -108,8 +108,8 @@ export default function UserAndRoleManagementPage() {
       <div className="flex-1 overflow-auto p-6">
         {activeTab === "users" && (
           <>
-            <DataTable columns={userColumns} data={users} isLoading={isLoading} />
-            <Pagination currentPage={page} totalPages={Math.ceil((userResponse?.totalCount||1)/10)} onPageChange={setPage} />
+            <DataTable columns={userColumns} data={users} loading={isLoading} />
+            <Pagination page={page} totalPages={Math.ceil((userResponse?.totalCount||1)/10)} onChange={setPage} />
           </>
         )}
 

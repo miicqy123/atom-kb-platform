@@ -76,7 +76,7 @@ export default function QAPairsPage() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader title="QA Pairs 管理器" description="管理问答对数据集"
-        action={
+        actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={()=>setShowTest(!showTest)} className="gap-2 text-sm">
               <FlaskConical className="h-4 w-4" /> 测试检索
@@ -205,7 +205,7 @@ export default function QAPairsPage() {
               <h4 className="text-xs font-semibold text-gray-500 mb-2">Question</h4>
               <p className="text-sm font-medium mb-2">{selected.question}</p>
               <div className="space-y-1">
-                {(selected.variants ?? []).map((v:string,i:number)=>(
+                {((selected as any)?.variants ? (selected as any).variants : []).map((v:string,i:number)=>(
                   <div key={i} className="text-xs text-gray-500">变体{i+1}: {v}</div>
                 ))}
               </div>
@@ -216,7 +216,7 @@ export default function QAPairsPage() {
               <div><span className="text-gray-400">难度:</span> {DIFFICULTY[selected.difficulty]?.stars} {DIFFICULTY[selected.difficulty]?.label}</div>
               <div><span className="text-gray-400">状态:</span> <StatusBadge status={selected.status} /></div>
               <div><span className="text-gray-400">Tags:</span> {(selected.tags??[]).join(", ")}</div>
-              <div><span className="text-gray-400">溯源:</span> {selected.sourceRawId ? "有" : "—"}</div>
+              <div><span className="text-gray-400">溯源:</span> {selected && 'sourceRawId' in selected ? "有" : "—"}</div>
             </div>
 
             {/* 7层 Answer */}
@@ -253,10 +253,10 @@ export default function QAPairsPage() {
 
       {/* 分页 */}
       <div className="px-6 pb-3">
-        {data && <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />}
+        {data && <Pagination page={page} totalPages={totalPages} onChange={setPage} />}
       </div>
 
-      <QADialog open={showCreate} onOpenChange={setShowCreate} />
+      <QADialog open={showCreate} onOpenChange={setShowCreate} projectId={projectId??""} />
       <QADialog open={!!editing} onOpenChange={()=>setEditing(null)} projectId={projectId??""} qaPair={editing} onComplete={()=>setEditing(null)} />
     </div>
   );
