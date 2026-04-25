@@ -42,6 +42,8 @@ export const pipelineRouter = router({
                 slotMappings: [tags.primarySlot, ...tags.secondarySlots],
                 experienceSource: raw.experienceSource,
                 exposureLevel: raw.exposureLevel,
+                category: tags.category,
+                subcategory: tags.subcategory,
                 status: 'DRAFT',
                 wordCount: chunk.length,
               },
