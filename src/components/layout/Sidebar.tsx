@@ -22,6 +22,7 @@ const NAV_SECTIONS = [
     label: "提示词工厂", icon: PenTool, color: "text-pf", basePath: "/prompts",
     items: [
       { label: "蓝图库", href: "/prompts/blueprints" },
+      { label: "任务管理", href: "/tasks" },
       { label: "评分诊断", href: "/prompts/evaluation" },
       { label: "底座包管理", href: "/prompts/base-packs" },
     ],

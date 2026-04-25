@@ -32,6 +32,7 @@ import { documentParseConfigRouter } from './document-parse-config';
 import { moduleRouter } from './module';
 import { packRouter } from './pack';
 import { cloneRouter } from './clone';
+import { taskRouter } from './task';
 
 export const appRouter = router({
   raw: rawRouter,
@@ -68,6 +69,7 @@ export const appRouter = router({
   module: moduleRouter,
   pack: packRouter,
   clone: cloneRouter,
+  task: taskRouter,
 });
 
 export type AppRouter = typeof appRouter;
