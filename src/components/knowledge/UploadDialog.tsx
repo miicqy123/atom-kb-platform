@@ -22,7 +22,8 @@ export default function UploadDialog({ open, onOpenChange, projectId: propProjec
   const [uploading, setUploading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const { projectId: storeProjectId } = useProjectStore();
+  const { currentProject } = useProjectStore();
+  const storeProjectId = currentProject?.id;
 
   // 优先使用传入的projectId，如果没有则使用store中的projectId
   const effectiveProjectId = propProjectId || storeProjectId;

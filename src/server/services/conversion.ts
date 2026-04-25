@@ -40,8 +40,23 @@ function htmlToMarkdown(html: string): string {
 }
 
 async function convertFileToMarkdown(filePath: string, format: string): Promise<string> {
-  const absolutePath = path.join(process.cwd(), "public", filePath);
-  const buffer = await readFile(absolutePath);
+  let buffer: Buffer;
+  if (filePath.startsWith("http")) {
+    // 从 Vercel Blob URL 下载
+    const res = await fetch(filePath);
+    if (!res.ok) throw new Error("下载文件失败: " + res.status);
+    const arrayBuf = await res.arrayBuffer();
+    buffer = Buffer.from(arrayBuf);
+  } else if (filePath.startsWith("data:")) {
+    // Base64 兼容
+    const base64Part = filePath.split(",")[1];
+    if (!base64Part) throw new Error("无效的 data URL");
+    buffer = Buffer.from(base64Part, "base64");
+  } else {
+    // 本地开发兼容
+    const absolutePath = path.join(process.cwd(), "public", filePath);
+    buffer = await readFile(absolutePath);
+  }
 
   switch (format) {
     case "WORD": {
@@ -50,7 +65,7 @@ async function convertFileToMarkdown(filePath: string, format: string): Promise<
         const result = await mammoth.default.convertToHtml({ buffer });
         return htmlToMarkdown(result.value);
       } catch (e) {
-        // mammoth 未安装时回退为纯文本
+        // mammoth 鏈畨瑁呮椂鍥為€€涓虹函鏂囨湰
         return buffer.toString("utf-8");
       }
     }
@@ -60,17 +75,17 @@ async function convertFileToMarkdown(filePath: string, format: string): Promise<
         const data = await pdfParse(buffer);
         return data.text.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0).join("\n\n");
       } catch (e) {
-        return `> ⚠️ PDF 解析失败: ${(e as Error).message}`;
+        return `> ⚠️ PDF 瑙ｆ瀽澶辫触: ${(e as Error).message}`;
       }
     }
     case "PPT":
     case "EXCEL":
-      return `> ⚠️ ${format} 格式暂不支持自动转换，请手动粘贴内容。\n\n---\n\n（原始文件：${filePath}）`;
+      return `> ⚠️ ${format} 鏍煎紡鏆備笉鏀寔鑷姩杞崲锛岃鎵嬪姩绮樿创鍐呭銆俓n\n---\n\n锛堝師濮嬫枃浠讹細${filePath}锛塦;
     case "AUDIO":
     case "VIDEO":
-      return `> ⚠️ 音视频文件需要 ASR 转录服务，当前版本暂不支持。\n\n---\n\n（原始文件：${filePath}）`;
+      return `> ⚠️ 闊宠棰戞枃浠堕渶瑕?ASR 杞綍鏈嶅姟锛屽綋鍓嶇増鏈殏涓嶆敮鎸併€俓n\n---\n\n锛堝師濮嬫枃浠讹細${filePath}锛塦;
     case "SCREENSHOT":
-      return `> ⚠️ 图片文件需要 OCR 识别服务，当前版本暂不支持。\n\n---\n\n（原始文件：${filePath}）`;
+      return `> ⚠️ 鍥剧墖鏂囦欢闇€瑕?OCR 璇嗗埆鏈嶅姟锛屽綋鍓嶇増鏈殏涓嶆敮鎸併€俓n\n---\n\n锛堝師濮嬫枃浠讹細${filePath}锛塦;
     default:
       return buffer.toString("utf-8");
   }
@@ -82,7 +97,7 @@ export async function runConversion(rawId: string): Promise<void> {
   if (!raw.originalFileUrl) {
     await prisma.raw.update({
       where: { id: rawId },
-      data: { conversionStatus: "FAILED", metadata: { error: "没有关联的文件" } as any },
+      data: { conversionStatus: "FAILED", metadata: { error: "娌℃湁鍏宠仈鐨勬枃浠? } as any },
     });
     return;
   }
@@ -100,9 +115,9 @@ export async function runConversion(rawId: string): Promise<void> {
       data: { markdownContent: markdown, conversionStatus: "CONVERTED" },
     });
 
-    console.log(`✅ Raw ${rawId}（${raw.title}）转换完成，${markdown.length} 字符`);
+    console.log(`✅ Raw ${rawId}锛?{raw.title}锛夎浆鎹㈠畬鎴愶紝${markdown.length} 瀛楃`);
   } catch (error: any) {
-    console.error(`❌ Raw ${rawId} 转换失败:`, error);
+    console.error(`❌ Raw ${rawId} 杞崲澶辫触:`, error);
     await prisma.raw.update({
       where: { id: rawId },
       data: { conversionStatus: "FAILED", metadata: { error: error.message } as any },
