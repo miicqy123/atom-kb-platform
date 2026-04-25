@@ -82,11 +82,11 @@ async function convertFileToMarkdown(filePath: string, format: string): Promise<
     }
     case "PDF": {
       try {
-        const pdfParse = (await import("pdf-parse")).default;
-        const data = await pdfParse(buffer);
-        return data.text.split("\n").map((l: string) => l.trim()).filter((l: string) => l.length > 0).join("\n\n");
+        const { pdfBufferToMarkdown } = await import("./pdf-to-markdown");
+        return await pdfBufferToMarkdown(buffer);
       } catch (e) {
-        return "> PDF parse failed: " + (e as Error).message;
+        console.error("[PDF] Conversion error:", e);
+        return "> PDF 转换失败: " + (e as Error).message;
       }
     }
     case "PPT":
