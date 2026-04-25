@@ -257,7 +257,7 @@ export default function RawMaterialsPage() {
         {activeTab === "list" && (
           <div className="flex h-full">
             {/* 左侧：素材列表 */}
-            <div className="w-1/2 border-r overflow-y-auto">
+            <div className={`${viewMode === "table" ? "w-1/2 border-r" : selectedId ? "w-1/2 border-r" : "w-full"} overflow-y-auto`}>
               {isLoading ? (
                 <div className="p-8 text-center text-gray-400">加载中...</div>
               ) : items.length === 0 ? (
@@ -265,7 +265,8 @@ export default function RawMaterialsPage() {
                   <Upload className="mx-auto w-12 h-12 text-gray-300 mb-3" />
                   <p className="text-gray-400">暂无素材，请点击右上角上传</p>
                 </div>
-              ) : (
+              ) : viewMode === "table" ? (
+                /* ====== 列表视图 ====== */
                 <div className="divide-y">
                   {items.map((r: any) => (
                     <div
@@ -284,13 +285,91 @@ export default function RawMaterialsPage() {
                           <span>{EXP_SOURCE_LABELS[r.experienceSource] || r.experienceSource}</span>
                           <span>·</span>
                           <span>{formatFileSize(r.fileSize)}</span>
-                          <span>·</span>
-                          <span>{r.createdAt ? new Date(r.createdAt).toLocaleDateString("zh-CN") : ""}</span>
                         </div>
                       </div>
                       <StatusBadge status={r.conversionStatus} />
                     </div>
                   ))}
+                </div>
+              ) : viewMode === "card" ? (
+                /* ====== 卡片视图 ====== */
+                <div className="grid grid-cols-2 gap-3 p-4">
+                  {items.map((r: any) => (
+                    <div
+                      key={r.id}
+                      onClick={() => setSelectedId(r.id === selectedId ? null : r.id)}
+                      className={`rounded-xl border p-3 cursor-pointer transition-all ${
+                        r.id === selectedId ? "border-blue-500 bg-blue-50 shadow-md" : "border-gray-200 bg-white hover:shadow-md hover:border-blue-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        {FORMAT_ICONS[r.format] ?? <File className="w-4 h-4" />}
+                        <span className="text-sm font-medium truncate flex-1">{r.title}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                            {MATERIAL_TYPE_LABELS[r.materialType] || r.materialType}
+                          </span>
+                          <span className="text-xs text-gray-400">{formatFileSize(r.fileSize)}</span>
+                        </div>
+                        <StatusBadge status={r.conversionStatus} />
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-2">
+                        <span>{EXP_SOURCE_LABELS[r.experienceSource] || r.experienceSource}</span>
+                        <span>·</span>
+                        <span>{r.createdAt ? new Date(r.createdAt).toLocaleDateString("zh-CN") : ""}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* ====== 看板视图（按转换状态分组） ====== */
+                <div className="flex gap-4 p-4 h-full overflow-x-auto">
+                  {["PENDING", "CONVERTING", "CONVERTED", "FAILED"].map(status => {
+                    const statusItems = items.filter((r: any) => r.conversionStatus === status);
+                    const statusLabels: Record<string, string> = {
+                      PENDING: "待处理", CONVERTING: "转换中", CONVERTED: "已转换", FAILED: "失败"
+                    };
+                    const statusColors: Record<string, string> = {
+                      PENDING: "bg-gray-100 text-gray-600", CONVERTING: "bg-blue-100 text-blue-600",
+                      CONVERTED: "bg-green-100 text-green-600", FAILED: "bg-red-100 text-red-600"
+                    };
+                    return (
+                      <div key={status} className="flex-shrink-0 w-56 flex flex-col">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusColors[status]}`}>
+                            {statusLabels[status]}
+                          </span>
+                          <span className="text-xs text-gray-400">{statusItems.length}</span>
+                        </div>
+                        <div className="flex-1 space-y-2 overflow-y-auto">
+                          {statusItems.map((r: any) => (
+                            <div
+                              key={r.id}
+                              onClick={() => setSelectedId(r.id === selectedId ? null : r.id)}
+                              className={`rounded-lg border p-2.5 cursor-pointer transition-all ${
+                                r.id === selectedId ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:shadow-sm hover:border-blue-300"
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 mb-1">
+                                {FORMAT_ICONS[r.format] ?? <File className="w-3.5 h-3.5" />}
+                                <span className="text-xs font-medium truncate">{r.title}</span>
+                              </div>
+                              <div className="flex items-center gap-1 text-xs text-gray-400">
+                                <span>{MATERIAL_TYPE_LABELS[r.materialType] || r.materialType}</span>
+                                <span>·</span>
+                                <span>{formatFileSize(r.fileSize)}</span>
+                              </div>
+                            </div>
+                          ))}
+                          {statusItems.length === 0 && (
+                            <div className="text-xs text-gray-300 text-center py-6">暂无</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {/* 分页 */}
@@ -308,7 +387,7 @@ export default function RawMaterialsPage() {
             </div>
 
             {/* 右侧：详情面板 */}
-            <div className="w-1/2 overflow-y-auto">
+            <div className={`${viewMode === "table" || selectedId ? "w-1/2" : "hidden"} overflow-y-auto`}>
               {selectedItem ? (
                 <div className="p-5 space-y-5">
                   {/* 标题 */}
@@ -386,6 +465,12 @@ export default function RawMaterialsPage() {
                         <ExternalLink className="w-4 h-4" /> 进入知识加工工作台
                       </button>
                     )}
+                    <button
+                      onClick={() => setEditingItem(selectedItem)}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <Edit className="w-4 h-4" /> 编辑元数据
+                    </button>
                     <button
                       onClick={() => { if (confirm("确定删除「" + selectedItem.title + "」？")) deleteRaw.mutate({ id: selectedItem.id }); }}
                       className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-500 hover:bg-red-50"
