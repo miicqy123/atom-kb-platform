@@ -593,99 +593,276 @@ export default function RawMaterialsPage() {
   );
 }
 
-/* ========== 预览弹窗组件 ========== */
+/* ========== 预览弹窗组件（全格式预览浮层） ========== */
 function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onStartConversion, onEdit, onDelete }: {
   item: any;
   onClose: () => void;
-  onAddToKb: () => void;
-  onGoWorkbench: () => void;
+  onAddToKb?: () => void;
+  onGoWorkbench?: () => void;
   addingToKb?: boolean;
   onStartConversion?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
+  const hasMarkdown = !!item.markdownContent;
+  const hasOriginal = !!item.originalFileUrl;
+  const [activePreviewTab, setActivePreviewTab] = useState<"markdown" | "original">(
+    hasMarkdown ? "markdown" : "original"
+  );
+
+  // 根据文件格式决定原件预览方式
+  const renderOriginalPreview = () => {
+    if (!item.originalFileUrl) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full text-gray-400 py-20">
+          <File className="w-12 h-12 mb-3 text-gray-300" />
+          <p>暂无原件文件</p>
+        </div>
+      );
+    }
+
+    const previewUrl = `/api/blob-preview?url=${encodeURIComponent(item.originalFileUrl)}`;
+    const format = (item.format || "").toUpperCase();
+
+    // PDF - 浏览器原生 PDF 阅读器
+    if (format === "PDF") {
+      return (
+        <iframe
+          src={previewUrl}
+          className="w-full h-full border-0 rounded-lg"
+          title="PDF 预览"
+        />
+      );
+    }
+
+    // Word / Excel / PPT - 微软 Office Online 预览
+    if (["WORD", "EXCEL", "PPT"].includes(format)) {
+      const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(item.originalFileUrl)}`;
+      return (
+        <div className="w-full h-full flex flex-col">
+          <iframe
+            src={officeViewerUrl}
+            className="w-full flex-1 border-0 rounded-lg"
+            title="Office 文档预览"
+          />
+          <div className="flex items-center justify-center gap-3 pt-3">
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-blue-600 hover:text-blue-700"
+            >
+              如预览失败，点此直接下载/打开 ↗
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    // 图片
+    if (format === "SCREENSHOT" || /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(item.originalFileName || "")) {
+      return (
+        <div className="w-full h-full flex items-center justify-center overflow-auto p-4">
+          <img
+            src={previewUrl}
+            alt={item.title}
+            className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
+          />
+        </div>
+      );
+    }
+
+    // 音频
+    if (format === "AUDIO" || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(item.originalFileName || "")) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-6 py-20">
+          <Headphones className="w-16 h-16 text-purple-400" />
+          <audio controls className="w-full max-w-md" src={previewUrl}>
+            您的浏览器不支持音频播放
+          </audio>
+          <p className="text-sm text-gray-500">{item.originalFileName || item.title}</p>
+        </div>
+      );
+    }
+
+    // 视频
+    if (format === "VIDEO" || /\.(mp4|webm|mov|avi|mkv)$/i.test(item.originalFileName || "")) {
+      return (
+        <div className="w-full h-full flex items-center justify-center p-4">
+          <video controls className="max-w-full max-h-full rounded-lg shadow-sm" src={previewUrl}>
+            您的浏览器不支持视频播放
+          </video>
+        </div>
+      );
+    }
+
+    // 网页链接
+    if (format === "WEB_LINK" && item.sourceUrl) {
+      return (
+        <div className="w-full h-full flex flex-col">
+          <iframe
+            src={item.sourceUrl}
+            className="w-full flex-1 border-0 rounded-lg"
+            title="网页预览"
+            sandbox="allow-scripts allow-same-origin"
+          />
+          <div className="flex items-center justify-center gap-3 pt-3">
+            <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:text-blue-700">
+              在新标签页打开 ↗
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    // 其他格式 - 提供下载/跳转
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-4 py-20">
+        <File className="w-16 h-16 text-gray-300" />
+        <p className="text-gray-500">该格式暂不支持在线预览</p>
+        <a
+          href={previewUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm text-white hover:bg-blue-700 shadow-sm"
+        >
+          <ExternalLink className="w-4 h-4" /> 下载 / 在浏览器中打开
+        </a>
+      </div>
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="w-full max-w-3xl max-h-[80vh] bg-white rounded-2xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <div className="flex items-center gap-3 min-w-0">
-            {FORMAT_ICONS[item.format] ?? <File className="w-5 h-5" />}
-            <div className="min-w-0">
-              <h3 className="text-base font-semibold truncate">{item.title}</h3>
-              <div className="flex gap-2 text-xs text-gray-400 mt-0.5">
-                <span>{MATERIAL_TYPE_LABELS[item.materialType] || item.materialType}</span>
-                <span>{EXP_SOURCE_LABELS[item.experienceSource] || item.experienceSource}</span>
-                <span>{item.markdownContent ? item.markdownContent.length + " 字" : ""}</span>
+      <div className="w-full max-w-4xl h-[85vh] bg-white rounded-2xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* 头部 */}
+        <div className="shrink-0 px-6 py-4 border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              {FORMAT_ICONS[item.format] ?? <File className="w-5 h-5" />}
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold truncate">{item.title}</h3>
+                <div className="flex gap-2 text-xs text-gray-400 mt-0.5">
+                  <span>{MATERIAL_TYPE_LABELS[item.materialType] || item.materialType}</span>
+                  <span>{EXP_SOURCE_LABELS[item.experienceSource] || item.experienceSource}</span>
+                  <span>{item.format}</span>
+                  <span>{item.markdownContent ? item.markdownContent.length + " 字" : ""}</span>
+                </div>
               </div>
             </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {item.originalFileUrl && (
+                <a
+                  href={`/api/blob-preview?url=${encodeURIComponent(item.originalFileUrl)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-50"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> 新窗口打开
+                </a>
+              )}
+              <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {item.originalFileUrl && (
-              <a href={`/api/blob-preview?url=${encodeURIComponent(item.originalFileUrl)}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-50">
-                <Eye className="w-3.5 h-3.5" /> 原件
-              </a>
-            )}
-            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><X className="w-5 h-5 text-gray-400" /></button>
-          </div>
+
+          {/* 预览 Tab 切换 */}
+          {hasMarkdown && hasOriginal && (
+            <div className="flex gap-1 mt-3">
+              <button
+                onClick={() => setActivePreviewTab("markdown")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                  activePreviewTab === "markdown"
+                    ? "bg-blue-100 text-blue-700"
+                    : "text-gray-500 hover:bg-gray-100"
+                }`}
+              >
+                📝 Markdown 内容
+              </button>
+              <button
+                onClick={() => setActivePreviewTab("original")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                  activePreviewTab === "original"
+                    ? "bg-blue-100 text-blue-700"
+                    : "text-gray-500 hover:bg-gray-100"
+                }`}
+              >
+                📄 原件预览
+              </button>
+            </div>
+          )}
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono leading-relaxed">
-            {item.markdownContent || "暂无 Markdown 内容"}
-          </pre>
+
+        {/* 内容区 */}
+        <div className="flex-1 overflow-hidden">
+          {activePreviewTab === "markdown" && hasMarkdown ? (
+            <div className="h-full overflow-y-auto px-6 py-4">
+              <pre className="whitespace-pre-wrap text-sm text-gray-700 font-mono leading-relaxed">
+                {item.markdownContent}
+              </pre>
+            </div>
+          ) : (
+            <div className="h-full p-4">
+              {renderOriginalPreview()}
+            </div>
+          )}
         </div>
-        <div className="flex items-center justify-between px-6 py-4 border-t">
+
+        {/* 底部操作栏 */}
+        <div className="shrink-0 flex items-center justify-between px-6 py-3 border-t bg-gray-50 rounded-b-2xl">
           <div className="flex items-center gap-2">
             {item.conversionStatus === "PENDING" && onStartConversion && (
               <button
-                onClick={() => { onStartConversion(); }}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm text-white hover:bg-blue-700 shadow-sm"
+                onClick={onStartConversion}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-700"
               >
-                <Play className="w-4 h-4" /> 启动加工
+                <Play className="w-3.5 h-3.5" /> 启动加工
               </button>
             )}
             {item.conversionStatus === "FAILED" && onStartConversion && (
               <button
-                onClick={() => { onStartConversion(); }}
-                className="flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2.5 text-sm text-red-600 hover:bg-red-100"
+                onClick={onStartConversion}
+                className="flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-600 hover:bg-red-100"
               >
-                <RotateCcw className="w-4 h-4" /> 重试转换
+                <RotateCcw className="w-3.5 h-3.5" /> 重试转换
               </button>
             )}
             {onEdit && (
               <button
-                onClick={() => { onEdit(); }}
-                className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                onClick={onEdit}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-600 hover:bg-gray-100"
               >
-                <Edit className="w-4 h-4" /> 编辑元数据
+                <Edit className="w-3.5 h-3.5" /> 编辑元数据
               </button>
             )}
             {onDelete && (
               <button
                 onClick={() => { if (confirm("确定删除「" + item.title + "」？")) onDelete(); }}
-                className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50"
+                className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-xs text-red-500 hover:bg-red-50"
               >
-                <Trash2 className="w-4 h-4" /> 删除
+                <Trash2 className="w-3.5 h-3.5" /> 删除
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            {item.conversionStatus === "CONVERTED" && (
-              <>
-                <button
-                  onClick={onAddToKb}
-                  disabled={addingToKb}
-                  className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm text-white hover:bg-green-700 shadow-sm disabled:opacity-50"
-                >
-                  <Play className="w-4 h-4" />
-                  {addingToKb ? "添加中..." : "添加到企业知识库"}
-                </button>
-                <button
-                  onClick={onGoWorkbench}
-                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm text-white hover:bg-blue-700 shadow-sm"
-                >
-                  <ExternalLink className="w-4 h-4" /> 进入工作台加工
-                </button>
-              </>
+          <div className="flex items-center gap-2">
+            {item.conversionStatus === "CONVERTED" && onAddToKb && (
+              <button
+                onClick={onAddToKb}
+                disabled={addingToKb}
+                className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                <Play className="w-3.5 h-3.5" />
+                {addingToKb ? "添加中..." : "添加到知识库"}
+              </button>
+            )}
+            {onGoWorkbench && (
+              <button
+                onClick={onGoWorkbench}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-700"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> 进入工作台
+              </button>
             )}
           </div>
         </div>
