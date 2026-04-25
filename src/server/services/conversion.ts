@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import path from "path";
+import { parseDocument } from "./document-parse-service";
 
 const prisma = new PrismaClient();
 
@@ -55,7 +56,7 @@ async function readLocalFile(filePath: string): Promise<Buffer> {
   return readFile(absolutePath);
 }
 
-async function getFileBuffer(filePath: string): Promise<Buffer> {
+export async function getFileBuffer(filePath: string): Promise<Buffer> {
   if (filePath.startsWith("http")) {
     return downloadBuffer(filePath);
   } else if (filePath.startsWith("data:")) {
@@ -77,29 +78,56 @@ async function convertFileToMarkdown(filePath: string, format: string): Promise<
         const result = await mammoth.default.convertToHtml({ buffer });
         return htmlToMarkdown(result.value);
       } catch (e) {
-        return buffer.toString("utf-8");
+        // Word 失败时也尝试 AI 解析
+        try {
+          const { markdown } = await parseDocument(buffer, "application/msword", "PDF_EXTRACT");
+          return markdown;
+        } catch {
+          return buffer.toString("utf-8");
+        }
       }
     }
+
     case "PDF": {
       try {
-        const { pdfBufferToMarkdown } = await import("./pdf-to-markdown");
-        return await pdfBufferToMarkdown(buffer);
+        const { markdown } = await parseDocument(buffer, "application/pdf", "PDF_EXTRACT");
+        if (markdown && markdown.length > 30) return markdown;
+        return "> PDF 内容为空，可能是扫描件。请尝试在后台切换为 AI OCR 模型。";
       } catch (e) {
-        console.error("[PDF] Conversion error:", e);
         return "> PDF 转换失败: " + (e as Error).message;
       }
     }
+
+    case "SCREENSHOT": {
+      try {
+        const mimeType = detectImageMime(filePath, buffer);
+        const { markdown } = await parseDocument(buffer, mimeType, "IMAGE_OCR");
+        if (markdown && markdown.length > 10) return markdown;
+        return "> 图片 OCR 未识别到文字。请确认后台已配置 AI Vision 模型。";
+      } catch (e) {
+        return "> 图片 OCR 失败: " + (e as Error).message + "\n\n请在后台 [系统配置 → 知识加工引擎] 中配置 OCR 模型。";
+      }
+    }
+
     case "PPT":
     case "EXCEL":
       return "> " + format + " format is not supported for auto-conversion yet.\n\n---\n\nOriginal file: " + filePath;
+
     case "AUDIO":
     case "VIDEO":
       return "> Audio/Video files require ASR transcription service (not available yet).\n\n---\n\nOriginal file: " + filePath;
-    case "SCREENSHOT":
-      return "> Image files require OCR service (not available yet).\n\n---\n\nOriginal file: " + filePath;
+
     default:
       return buffer.toString("utf-8");
   }
+}
+
+// 辅助：检测图片 MIME 类型
+function detectImageMime(filePath: string, buffer: Buffer): string {
+  if (filePath.endsWith(".png") || buffer[0] === 0x89) return "image/png";
+  if (filePath.endsWith(".webp")) return "image/webp";
+  if (filePath.endsWith(".gif")) return "image/gif";
+  return "image/jpeg"; // 默认 JPEG
 }
 
 export async function runConversion(rawId: string): Promise<void> {

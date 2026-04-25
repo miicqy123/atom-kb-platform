@@ -120,4 +120,31 @@ export const rawRouter = router({
       await runConversion(input.id);
       return { success: true, message: "done" };
     }),
+
+  ocrImage: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const raw = await ctx.prisma.raw.findUniqueOrThrow({ where: { id: input.id } });
+      if (!raw.originalFileUrl) throw new Error("No file URL");
+      if (raw.format !== "SCREENSHOT") throw new Error("Only SCREENSHOT format supports OCR");
+
+      const { parseDocument } = await import("@/server/services/document-parse-service");
+
+      const response = await fetch(raw.originalFileUrl);
+      const buf = Buffer.from(await response.arrayBuffer());
+
+      const mimeType = raw.originalFileName?.endsWith(".png") ? "image/png" : "image/jpeg";
+      const { markdown, provider, model } = await parseDocument(buf, mimeType, "IMAGE_OCR");
+
+      await ctx.prisma.raw.update({
+        where: { id: input.id },
+        data: {
+          markdownContent: markdown,
+          conversionStatus: "CONVERTED",
+          metadata: { ocrProvider: provider, ocrModel: model } as any,
+        },
+      });
+
+      return { success: true, provider, model, length: markdown.length };
+    }),
 });

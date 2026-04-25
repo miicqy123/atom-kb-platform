@@ -188,7 +188,7 @@ async function parseWithCustomAPI(
   if (!config.apiEndpoint) throw new Error("自定义解析 API 未配置 endpoint");
 
   const formData = new FormData();
-  formData.append("file", new Blob([buffer], { type: mimeType }), "document");
+  formData.append("file", new Blob([new Uint8Array(buffer)], { type: mimeType }), "document");
   formData.append("output_format", "markdown");
 
   const headers: Record<string, string> = {};
