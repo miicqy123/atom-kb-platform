@@ -8,6 +8,7 @@ export const rawRouter = router({
       format: z.string().optional(),
       conversionStatus: z.string().optional(),
       search: z.string().optional(),
+      titlePrefix: z.string().optional(),
       materialType: z.string().optional(),
       experienceSource: z.string().optional(),
       page: z.number().default(1),
@@ -18,6 +19,7 @@ export const rawRouter = router({
       if (input.format) where.format = input.format;
       if (input.conversionStatus) where.conversionStatus = input.conversionStatus;
       if (input.search) where.title = { contains: input.search, mode: "insensitive" };
+      else if (input.titlePrefix) where.title = { startsWith: input.titlePrefix };
       if (input.materialType) where.materialType = input.materialType;
       if (input.experienceSource) where.experienceSource = input.experienceSource;
 

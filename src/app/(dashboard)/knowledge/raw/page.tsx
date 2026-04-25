@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useRouter } from "next/navigation";
 import EnterpriseSurveyDialog, { surveyToMarkdown, type SurveyData } from "@/components/knowledge/EnterpriseSurveyDialog";
 import FilePreviewRenderer from "@/components/FilePreviewRenderer";
+import PositionSurveyTab from "@/components/knowledge/position-survey/PositionSurveyTab";
 import {
   Upload, Search, FileText, FileSpreadsheet, Headphones, Image, Globe,
   Trash2, Eye, RotateCcw, X, AlertCircle, ChevronLeft, ChevronRight,
@@ -50,12 +51,13 @@ function getMarkdownPreview(content: string | null | undefined, lines: number = 
 }
 
 // ===================== Tab 类型 =====================
-type TabKey = "list" | "markdown" | "survey";
+type TabKey = "list" | "markdown" | "survey" | "position";
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "list", label: "素材列表", icon: <FileText className="w-4 h-4" /> },
   { key: "markdown", label: "已转换 Markdown", icon: <File className="w-4 h-4" /> },
   { key: "survey", label: "企业调研", icon: <Building2 className="w-4 h-4" /> },
+  { key: "position", label: "岗位调研", icon: <File className="w-4 h-4" /> },
 ];
 
 // ===================== 主组件 =====================
@@ -560,6 +562,11 @@ export default function RawMaterialsPage() {
               );
             })()}
           </div>
+        )}
+
+        {/* ========== Tab 4: 岗位调研 ========== */}
+        {activeTab === "position" && (
+          <PositionSurveyTab />
         )}
       </div>
 
