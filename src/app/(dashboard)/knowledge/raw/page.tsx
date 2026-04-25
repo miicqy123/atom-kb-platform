@@ -54,6 +54,7 @@ export default function RawMaterialsPage() {
   const [formatFilter, setFormatFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [expSourceFilter, setExpSourceFilter] = useState("");
   const [showUpload, setShowUpload] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -70,6 +71,7 @@ export default function RawMaterialsPage() {
       search: debouncedSearch || undefined,
       format: formatFilter || undefined,
       conversionStatus: statusFilter || undefined,
+      experienceSource: expSourceFilter || undefined,
     },
     { enabled: !!currentProject, refetchInterval: 5000 }
   );
@@ -137,6 +139,12 @@ export default function RawMaterialsPage() {
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
           <option value="">全部状态</option>
           {["PENDING","CONVERTING","CONVERTED","FAILED"].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={expSourceFilter} onChange={(e) => setExpSourceFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
+          <option value="">全部经验源</option>
+          <option value="E1_COMPANY">E1 企业</option>
+          <option value="E2_INDUSTRY">E2 行业</option>
+          <option value="E3_CROSS_INDUSTRY">E3 跨行业</option>
         </select>
       </div>
 
