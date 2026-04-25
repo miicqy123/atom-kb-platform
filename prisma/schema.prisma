@@ -28,6 +28,7 @@ model Tenant {
   scenarioTags      ScenarioTag[]
   users             User[]
   workspaces        Workspace[]
+  documentParseConfigs DocumentParseConfig[]
 }
 
 model Workspace {
@@ -607,6 +608,37 @@ model ModelConfig {
   updatedAt DateTime @updatedAt
   config    Json?
   tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+}
+
+model DocumentParseConfig {
+  id            String   @id @default(cuid())
+  tenantId      String?
+  // 用途类型：PDF_EXTRACT / IMAGE_OCR / SCAN_PDF_OCR
+  taskType      String
+  // 优先级（同类型多个配置时按优先级选择）
+  priority      Int      @default(0)
+  // 使用的模型提供商：OPENAI / QWEN / LOCAL_PDFJS / CUSTOM
+  providerType  String
+  // 模型名称：gpt-4o / gpt-4o-mini / qwen-vl-max / local
+  modelName     String
+  // API 端点（自定义时使用）
+  apiEndpoint   String?
+  // API Key（加密存储）
+  apiKey        String?
+  // 额外配置 JSON：temperature, maxTokens, systemPrompt 等
+  config        Json?    @default("{}")
+  // 是否启用
+  enabled       Boolean  @default(true)
+  // 每月调用限制（0=无限）
+  monthlyLimit  Int      @default(0)
+  // 当月已用次数
+  monthlyUsed   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, taskType, priority])
+  @@index([tenantId, taskType, enabled])
 }
 
 model ApiKey {
