@@ -80,14 +80,16 @@ export const rawRouter = router({
     .mutation(async ({ ctx, input }) => {
       const raw = await ctx.prisma.raw.findUniqueOrThrow({ where: { id: input.id } });
       if (!raw.originalFileUrl) {
-        throw new Error("该素材没有关联文件，无法转换");
+        throw new Error("No file URL");
       }
 
-      // 异步执行转换
-      import("@/server/services/conversion").then(({ runConversion }) => {
-        runConversion(input.id).catch((err) => console.error("转换异步任务失败:", err));
-      });
-
-      return { success: true, message: "转换任务已提交" };
+      try {
+        const { runConversion } = await import("@/server/services/conversion");
+        await runConversion(input.id);
+        return { success: true, message: "Conversion completed" };
+      } catch (err: any) {
+        console.error("Conversion failed:", err);
+        return { success: false, message: err.message || "Conversion failed" };
+      }
     }),
 });
