@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { useToast } from '@/hooks/use-toast';
+import { CATEGORY_OPTIONS, getSubcategoryOptions } from '@/lib/categoryMaps';
 import { PageHeader } from '@/components/ui/PageHeader';
 
 const SLOT_KEYS = ['S0','S1','S2','S3','S4','S5','S6','S7','S8','S9','S10'];
@@ -19,6 +20,8 @@ export default function SlotsConfigPage({ params }: { params: { id: string } }) 
     layers: ['A','B','C','D'] as ('A' | 'B' | 'C' | 'D')[],
     dimensions: ''
   });
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
 
   const { data: slots, refetch } = trpc.blueprint.preview.useQuery({ blueprintId });
 
@@ -126,6 +129,56 @@ export default function SlotsConfigPage({ params }: { params: { id: string } }) 
                   className="border rounded-lg px-3 py-2 text-sm w-full"
                 />
               </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">类别过滤（多选）</label>
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORY_OPTIONS.map(opt => (
+                    <label key={opt.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedCategories.includes(opt.value)}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setSelectedCategories(prev => [...prev, opt.value]);
+                          } else {
+                            setSelectedCategories(prev => prev.filter(c => c !== opt.value));
+                            const subsToRemove = getSubcategoryOptions(opt.value).map(s => s.value);
+                            setSelectedSubcategories(prev => prev.filter(s => !subsToRemove.includes(s)));
+                          }
+                        }}
+                        className="w-4 h-4"
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {selectedCategories.length > 0 && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">子类别精确过滤（多选）</label>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedCategories.flatMap(cat =>
+                      getSubcategoryOptions(cat).map(opt => (
+                        <label key={opt.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedSubcategories.includes(opt.value)}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setSelectedSubcategories(prev => [...prev, opt.value]);
+                              } else {
+                                setSelectedSubcategories(prev => prev.filter(s => s !== opt.value));
+                              }
+                            }}
+                            className="w-4 h-4"
+                          />
+                          {opt.label}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex gap-3 mt-6">
               <button
@@ -140,6 +193,8 @@ export default function SlotsConfigPage({ params }: { params: { id: string } }) 
                     layers: form.layers,
                     dimensions: dims,
                     conflictPriority: ['D','C','B','A'],
+                    categories: selectedCategories,
+                    subcategories: selectedSubcategories,
                   });
                 }}
                 disabled={createSlotMutation.isPending}
