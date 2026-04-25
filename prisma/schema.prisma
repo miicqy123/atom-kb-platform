@@ -245,15 +245,17 @@ model SlotConfig {
 }
 
 model FetchRule {
-  id           String     @id @default(cuid())
-  slotConfigId String
-  layers       Layer[]
-  dimensions   Int[]
-  subSlots     String[]
-  topN         Int        @default(5)
-  priority     Int        @default(0)
-  createdAt    DateTime   @default(now())
-  slotConfig   SlotConfig @relation(fields: [slotConfigId], references: [id], onDelete: Cascade)
+  id            String     @id @default(cuid())
+  slotConfigId  String
+  layers        Layer[]
+  dimensions    Int[]
+  categories    ContentCategory[]      // 新增：按内容类别过滤
+  subcategories ContentSubCategory[]   // 新增：按子类别精确匹配
+  subSlots      String[]
+  topN          Int        @default(5)
+  priority      Int        @default(0)
+  createdAt     DateTime   @default(now())
+  slotConfig    SlotConfig @relation(fields: [slotConfigId], references: [id], onDelete: Cascade)
 }
 
 model AtomBlueprint {
