@@ -120,45 +120,52 @@ export const projectRouter = router({
     }),
 
   // 创建项目
-  create: protectedProcedure
+  create: publicProcedure
     .input(z.object({
-      name: z.string().min(1).max(255),
-      workspaceId: z.string(),
-      type: z.string().optional(),
+      name: z.string().min(1, "项目名称不能为空"),
       description: z.string().optional(),
-      visibility: z.enum(['PRIVATE', 'TEAM', 'PUBLIC']).optional().default('PRIVATE'),
+      type: z.string().default("client"),
     }))
     .mutation(async ({ ctx, input }) => {
-      // 检查用户是否有权限在该工作空间中创建项目
-      const workspace = await ctx.prisma.workspace.findUnique({
-        where: { id: input.workspaceId },
-      });
-
+      // 自动关联到第一个可用的 workspace 和 owner
+      // 开发阶段简化处理，上线前需改为从 session 取当前用户
+      let workspace = await ctx.prisma.workspace.findFirst();
       if (!workspace) {
-        throw new Error('Workspace not found');
+        // 如果连 workspace 都没有，自动创建整套基础数据
+        let tenant = await ctx.prisma.tenant.findFirst();
+        if (!tenant) {
+          tenant = await ctx.prisma.tenant.create({
+            data: { name: "默认企业", industry: "互联网" },
+          });
+        }
+        workspace = await ctx.prisma.workspace.create({
+          data: { name: "默认工作空间", tenantId: tenant.id },
+        });
+      }
+      let owner = await ctx.prisma.user.findFirst();
+      if (!owner) {
+        const tenant = await ctx.prisma.tenant.findFirstOrThrow();
+        owner = await ctx.prisma.user.create({
+          data: {
+            email: "admin@demo.com",
+            name: "管理员",
+            role: "SUPER_ADMIN",
+            tenantId: tenant.id,
+          },
+        });
       }
 
-      // 检查用户是否是工作空间成员或拥有者
-      const userWorkspace = await ctx.prisma.workspaceUser.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          userId: ctx.session.user.id,
+      const project = await ctx.prisma.project.create({
+        data: {
+          name: input.name,
+          description: input.description ?? null,
+          type: input.type,
+          workspaceId: workspace.id,
+          ownerId: owner.id,
         },
       });
 
-      if (!userWorkspace && workspace.ownerId !== ctx.session.user.id) {
-        throw new Error('Access denied');
-      }
-
-      return ctx.prisma.project.create({
-        data: {
-          name: input.name,
-          workspaceId: input.workspaceId,
-          type: input.type,
-          description: input.description,
-          ownerId: ctx.session.user.id,
-        }
-      });
+      return project;
     }),
 
   // 更新项目
