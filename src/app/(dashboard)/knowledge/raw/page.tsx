@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { trpc } from "@/lib/trpc";
 import { useToast } from "@/hooks/use-toast";
-import UploadDialog from "@/components/knowledge/UploadDialog";
 import { useProjectStore } from "@/stores/projectStore";
 
 /* ── 常量 ── */
@@ -100,6 +99,154 @@ export default function RawMaterialsPage() {
     const vv = VERIFY_STATUS[v || "PENDING"] || VERIFY_STATUS.PENDING;
     return <span className="text-xs">{vv.icon} {vv.label}</span>;
   };
+
+  /* ── 上传模态框 ── */
+  function UploadModal({ onClose }: { onClose: () => void }) {
+    const { currentProject } = useProjectStore();
+    const utils = trpc.useUtils();
+    const createRaw = trpc.raw.create.useMutation({
+      onSuccess: () => {
+        utils.raw.getAll.invalidate();
+        onClose();
+      },
+    });
+
+    const [file, setFile] = useState<File | null>(null);
+    const [uploading, setUploading] = useState(false);
+    const [error, setError] = useState("");
+    const [form, setForm] = useState({
+      title: "",
+      format: "WORD",
+      materialType: "PRODUCT_DOC",
+      experienceSource: "E1_COMPANY",
+    });
+
+    const detectFormat = (fileName: string): string => {
+      const ext = fileName.split(".").pop()?.toLowerCase();
+      const map: Record<string, string> = {
+        doc: "WORD", docx: "WORD",
+        pdf: "PDF",
+        ppt: "PPT", pptx: "PPT",
+        xls: "EXCEL", xlsx: "EXCEL", csv: "EXCEL",
+        mp3: "AUDIO", wav: "AUDIO", m4a: "AUDIO",
+        mp4: "VIDEO", mov: "VIDEO", avi: "VIDEO",
+        png: "SCREENSHOT", jpg: "SCREENSHOT", jpeg: "SCREENSHOT",
+      };
+      return map[ext ?? ""] ?? "PDF";
+    };
+
+    const handleFileChange = (selectedFile: File) => {
+      setFile(selectedFile);
+      setError("");
+      const detectedFormat = detectFormat(selectedFile.name);
+      setForm((prev) => ({
+        ...prev,
+        title: prev.title || selectedFile.name.replace(/\.[^./]+$/, ""),
+        format: detectedFormat,
+      }));
+    };
+
+    const handleSubmit = async () => {
+      if (!file) { setError("请先选择文件"); return; }
+      if (!form.title.trim()) { setError("请填写素材标题"); return; }
+      if (!currentProject) { setError("请先在顶部选择一个 Project"); return; }
+
+      setUploading(true);
+      setError("");
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json();
+          throw new Error(err.error || "文件上传失败");
+        }
+
+        const { url: fileUrl } = await uploadRes.json();
+
+        await createRaw.mutateAsync({
+          title: form.title,
+          projectId: currentProject.id,
+          format: form.format,
+          materialType: form.materialType,
+          experienceSource: form.experienceSource,
+          originalFileUrl: fileUrl,
+        });
+      } catch (err: any) {
+        setError(err.message || "上传失败，请重试");
+      } finally {
+        setUploading(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="w-[520px] rounded-2xl bg-white p-6 shadow-xl">
+          <h2 className="text-lg font-bold">上传素材</h2>
+
+          <label
+            className="mt-4 flex cursor-pointer flex-col items-center rounded-lg border-2 border-dashed border-gray-300 p-8 text-center transition-colors hover:border-brand hover:bg-blue-50"
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onDrop={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              const droppedFile = e.dataTransfer.files?.[0];
+              if (droppedFile) handleFileChange(droppedFile);
+            }}
+          >
+            <Upload className="mx-auto h-10 w-10 text-gray-300" />
+            {file ? (
+              <p className="mt-2 text-sm font-medium text-brand">{file.name}（{(file.size / 1024 / 1024).toFixed(2)} MB）</p>
+            ) : (
+              <>
+                <p className="mt-2 text-sm text-gray-500">拖拽文件到此处，或点击选择文件</p>
+                <p className="text-xs text-gray-400">支持 Word / PDF / PPT / Excel / 音视频 / 截图</p>
+              </>
+            )}
+            <input
+              type="file"
+              className="hidden"
+              accept=".doc,.docx,.pdf,.ppt,.pptx,.xls,.xlsx,.csv,.mp3,.wav,.m4a,.mp4,.mov,.avi,.png,.jpg,.jpeg"
+              onChange={(e) => {
+                const selected = e.target.files?.[0];
+                if (selected) handleFileChange(selected);
+              }}
+            />
+          </label>
+
+          <div className="mt-4 space-y-3">
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="素材标题" className="w-full rounded-lg border px-3 py-2 text-sm" />
+
+            <div className="grid grid-cols-3 gap-3">
+              <select value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })} className="rounded-lg border px-3 py-2 text-sm">
+                {["WORD","PDF","PPT","EXCEL","AUDIO","VIDEO","SCREENSHOT","WEB_LINK"].map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+
+              <select value={form.materialType} onChange={(e) => setForm({ ...form, materialType: e.target.value })} className="rounded-lg border px-3 py-2 text-sm">
+                {["THEORY","CASE_STUDY","METHODOLOGY","FAQ","SCRIPT","REGULATION","PRODUCT_DOC","TRAINING_MATERIAL","MEETING_RECORD","CUSTOMER_VOICE","INDUSTRY_REPORT","COMPETITOR_ANALYSIS"].map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+
+              <select value={form.experienceSource} onChange={(e) => setForm({ ...form, experienceSource: e.target.value })} className="rounded-lg border px-3 py-2 text-sm">
+                <option value="E1_COMPANY">E1 企业经验</option>
+                <option value="E2_INDUSTRY">E2 行业经验</option>
+                <option value="E3_CROSS_INDUSTRY">E3 跨行业</option>
+              </select>
+            </div>
+          </div>
+
+          {error && <p className="mt-3 text-sm text-red-500">{error}</p>}
+
+          <div className="mt-6 flex justify-end gap-2">
+            <button onClick={onClose} disabled={uploading} className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50">取消</button>
+            <button onClick={handleSubmit} disabled={uploading || !file} className="rounded-lg bg-brand px-4 py-2 text-sm text-white hover:bg-brand-dark disabled:opacity-50">
+              {uploading ? "上传中…" : "确认上传"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -298,11 +445,12 @@ export default function RawMaterialsPage() {
         )}
       </div>
 
-      {/* ── 上传弹窗 ── */}
-      <UploadDialog
-        open={isUploadOpen}
-        onOpenChange={(v) => { setIsUploadOpen(v); if(!v) refetch(); }}
-      />
+      {/* ── 上传模态框 ── */}
+      {isUploadOpen && (
+        <UploadModal
+          onClose={() => setIsUploadOpen(false)}
+        />
+      )}
     </div>
   );
 }
