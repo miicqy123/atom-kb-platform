@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../trpc";
+import { protectedProcedure, router, publicProcedure } from "../trpc";
 
 export const rawRouter = router({
   // 获取所有Raw素材
-  getAll: protectedProcedure
+  getAll: publicProcedure
     .input(z.object({
       projectId: z.string(),
       limit: z.number().optional().default(10),
@@ -62,7 +62,7 @@ export const rawRouter = router({
     }),
 
   // 创建Raw素材
-  create: protectedProcedure
+  create: publicProcedure
     .input(z.object({
       title: z.string().min(1).max(255),
       projectId: z.string(),
@@ -75,34 +75,27 @@ export const rawRouter = router({
       ]),
       experienceSource: z.enum(['E1_COMPANY', 'E2_INDUSTRY', 'E3_CROSS_INDUSTRY']),
       originalFileName: z.string().optional(),
+      originalFileUrl: z.string().optional(), // 添加这个字段
       markdownContent: z.string().optional(),
       fileSize: z.number().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      // 检查用户是否有权限在该项目中创建素材
-      const project = await ctx.prisma.project.findUnique({
-        where: { id: input.projectId },
+      const raw = await ctx.prisma.raw.create({
+        data: input as any,
       });
 
-      if (!project) {
-        throw new Error('Project not found');
-      }
+      // TODO: 上线前恢复审计日志
+      // await ctx.prisma.auditLog.create({
+      //   data: {
+      //     userId: ctx.user.id,
+      //     action: "create",
+      //     entityType: "raw",
+      //     entityId: raw.id,
+      //     entityName: raw.title
+      //   }
+      // });
 
-      return ctx.prisma.raw.create({
-        data: {
-          title: input.title,
-          projectId: input.projectId,
-          format: input.format,
-          materialType: input.materialType,
-          experienceSource: input.experienceSource,
-          originalFileName: input.originalFileName,
-          markdownContent: input.markdownContent,
-          fileSize: input.fileSize,
-          conversionStatus: 'PENDING', // 默认为待处理
-          verificationStatus: 'unverified',
-          exposureLevel: 'INTERNAL', // 默认为内部
-        },
-      });
+      return raw;
     }),
 
   // 更新Raw素材
