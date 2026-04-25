@@ -7,8 +7,9 @@ import { useRouter } from "next/navigation";
 import {
   Upload, Search, FileText, FileSpreadsheet, Headphones, Image, Globe,
   Trash2, Eye, RotateCcw, X, AlertCircle, ChevronLeft, ChevronRight,
-  Play, ExternalLink, File, Presentation
+  Play, ExternalLink, File, Presentation, Building2
 } from "lucide-react";
+import EnterpriseSurveyDialog, { surveyToMarkdown, type SurveyData } from "@/components/knowledge/EnterpriseSurveyDialog";
 
 const FORMAT_ICONS: Record<string, React.ReactNode> = {
   WORD: <FileText className="h-4 w-4 text-blue-500" />,
@@ -64,6 +65,8 @@ export default function RawMaterialsPage() {
   const [previewItem, setPreviewItem] = useState<any>(null);
   const [addingToKb, setAddingToKb] = useState(false);
   const [selectedMdIds, setSelectedMdIds] = useState<Set<string>>(new Set());
+  const [showSurvey, setShowSurvey] = useState(false);
+  const [surveySubmitting, setSurveySubmitting] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -107,6 +110,50 @@ export default function RawMaterialsPage() {
     onError: () => alert("添加失败，请重试"),
   });
 
+  const createRaw = trpc.raw.create.useMutation({
+    onSuccess: () => utils.raw.list.invalidate(),
+  });
+
+  const handleSurveySubmit = async (surveyData: SurveyData) => {
+    if (!currentProject) {
+      alert("请先选择项目");
+      return;
+    }
+    setSurveySubmitting(true);
+    try {
+      const markdown = surveyToMarkdown(surveyData);
+      await createRaw.mutateAsync({
+        title: (surveyData.companyName || "企业调研") + " — 企业调研报告",
+        projectId: currentProject.id,
+        format: "WORD",
+        materialType: "INTERNAL_WIKI",
+        experienceSource: "E1_COMPANY",
+      });
+      const newItems = await utils.raw.list.fetch({
+        projectId: currentProject.id,
+        page: 1,
+        search: surveyData.companyName,
+      });
+      const created = newItems?.items?.[0];
+      if (created) {
+        await updateRaw.mutateAsync({
+          id: created.id,
+          data: {
+            markdownContent: markdown,
+            conversionStatus: "CONVERTED",
+          },
+        });
+      }
+      utils.raw.list.invalidate();
+      setShowSurvey(false);
+      alert("企业调研已保存到素材库！");
+    } catch (err: any) {
+      alert("保存失败: " + (err.message || "未知错误"));
+    } finally {
+      setSurveySubmitting(false);
+    }
+  };
+
   const items: any[] = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
   const totalPages = data?.totalPages ?? 1;
   const selectedItem = items.find((r: any) => r.id === selectedId);
@@ -139,6 +186,13 @@ export default function RawMaterialsPage() {
           <h1 className="text-xl font-bold text-gray-900">Raw 素材管理</h1>
           <p className="text-sm text-gray-500 mt-0.5">管理企业上传的原始资料文件，启动格式归一与双轨加工</p>
         </div>
+        <button
+          onClick={() => setShowSurvey(true)}
+          className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-700 hover:bg-blue-100 shadow-sm"
+        >
+          <Building2 className="h-4 w-4" />
+          企业调研
+        </button>
         <button
           onClick={() => setShowUpload(true)}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 shadow-sm"
@@ -717,6 +771,15 @@ export default function RawMaterialsPage() {
         </div>
       )}
 
+      {/* 企业调研弹窗 */}
+      {showSurvey && (
+        <EnterpriseSurveyDialog
+          open={showSurvey}
+          onClose={() => setShowSurvey(false)}
+          onSubmit={handleSurveySubmit}
+          submitting={surveySubmitting}
+        />
+      )}
       {/* 上传弹窗 */}
       {showUpload && (
         <UploadModal
