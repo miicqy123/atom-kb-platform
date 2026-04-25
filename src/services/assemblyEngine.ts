@@ -1,90 +1,126 @@
 // src/services/assemblyEngine.ts
 import { prisma } from '@/lib/prisma';
 import { matchThinkingModel, getThinkingPrompt } from './thinkingModelMatcher';
+import type { TaskType } from '@prisma/client';
 
-const SLOT_ORDER = ['S0','S1','S2','S3','S4','S6','S5','S10','S7','S8','S9'];
-const LAYER_PRIORITY: Record<string, number> = { D: 4, C: 3, B: 2, A: 1 };
+// 三层槽位分组
+const LAYER_L1 = ['S0', 'S1'];  // 元数据层：始终加载，≤200 词
+const LAYER_L2 = ['S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9']; // 指令层：按任务加载，≤3000 词
+const LAYER_L3 = ['S10']; // 资源层：RAG 按需注入，无限制
 
-export async function assembleBlueprint(blueprintId: string): Promise<string> {
-  const blueprint = await prisma.blueprint.findUniqueOrThrow({
+const L1_MAX_TOKENS = 200;
+const L2_MAX_TOKENS = 3000;
+
+export async function assembleBlueprint(
+  blueprintId: string,
+  options?: { taskType?: TaskType; skipL3?: boolean }
+): Promise<{
+  prompt: string;
+  layers: { L1: string; L2: string; L3: string };
+  totalTokens: number;
+  thinkingModel: string;
+}> {
+  const bp = await prisma.blueprint.findUniqueOrThrow({
     where: { id: blueprintId },
     include: {
-      slotConfigs: { include: { fetchRules: true } },
-      project: true,
+      slotConfigs: {
+        orderBy: { order: 'asc' },
+        include: {
+          fetchRules: true,
+        },
+      },
+      atoms: { include: { atom: true } },
     },
   });
 
-  // 查询项目关联的任务以确定思考模型
-  const task = await prisma.task.findFirst({
-    where: { projectId: blueprint.projectId },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  let thinkingPrefix = '';
-  if (task) {
-    const thinkingModel = matchThinkingModel(task.type);
-    thinkingPrefix = getThinkingPrompt(thinkingModel);
+  // ━━━ L1：元数据层（始终加载）━━━
+  let l1Content = '';
+  for (const sc of bp.slotConfigs.filter(s => LAYER_L1.includes(s.slotKey))) {
+    const slotAtoms = await fetchAtomsForSlot(bp.projectId, sc);
+    const basePack = await prisma.basePack.findFirst({
+      where: { slotKey: sc.slotKey, subSlotKey: sc.subSlotKey ?? undefined },
+    });
+    const content = [basePack?.content, ...slotAtoms.map(a => a.content)].filter(Boolean).join('\n');
+    l1Content += `\n<!-- ${sc.slotKey} -->\n${content}\n`;
   }
+  // S4.1 禁令总则也放入 L1
+  const s4Base = await prisma.basePack.findFirst({ where: { slotKey: 'S4', subSlotKey: 'S4.1' } });
+  if (s4Base) l1Content += `\n<!-- S4.1 禁令总则 -->\n${s4Base.content}\n`;
 
-  const sections: string[] = [];
+  // 截断 L1
+  l1Content = truncateToTokens(l1Content, L1_MAX_TOKENS);
 
-  // 按标准槽位顺序装配
-  for (const slotKey of SLOT_ORDER) {
-    const slotConfig = blueprint.slotConfigs.find(
-      (s) => s.slotKey === slotKey && !s.subSlotKey
-    );
-    if (!slotConfig) continue;
+  // ━━━ L2：指令层（按任务加载）━━━
+  const taskType = options?.taskType;
+  const thinkingModel = taskType ? matchThinkingModel(taskType) : 'COT';
+  const thinkingPrefix = getThinkingPrompt(thinkingModel);
 
-    const atoms = await fetchAtomsForSlot(slotConfig, blueprint.projectId);
-    if (atoms.length === 0) continue;
+  let l2Content = '';
+  for (const sc of bp.slotConfigs.filter(s => LAYER_L2.includes(s.slotKey))) {
+    const slotAtoms = await fetchAtomsForSlot(bp.projectId, sc);
+    const basePack = await prisma.basePack.findFirst({
+      where: { slotKey: sc.slotKey, subSlotKey: sc.subSlotKey ?? undefined },
+    });
+    let content = [basePack?.content, ...slotAtoms.map(a => a.content)].filter(Boolean).join('\n');
 
-    let content = atoms
-      .map((a) => `[${a.layer}·${slotKey}] ${a.content}`)
-      .join('\n\n');
-
-    // S5 槽位注入思考模型提示词
-    if (slotKey === 'S5' && thinkingPrefix) {
+    // S5 前置注入思考模型
+    if (sc.slotKey === 'S5') {
       content = `${thinkingPrefix}\n\n${content}`;
     }
 
-    sections.push(`## ${slotKey}\n\n${content}`);
+    l2Content += `\n<!-- ${sc.slotKey} -->\n${content}\n`;
+  }
+  l2Content = truncateToTokens(l2Content, L2_MAX_TOKENS);
 
-    // 更新 assembledContent 缓存
-    await prisma.slotConfig.update({
-      where: { id: slotConfig.id },
-      data: { assembledContent: content },
-    });
+  // ━━━ L3：资源层（RAG 按需注入）━━━
+  let l3Content = '';
+  if (!options?.skipL3) {
+    for (const sc of bp.slotConfigs.filter(s => LAYER_L3.includes(s.slotKey))) {
+      const slotAtoms = await fetchAtomsForSlot(bp.projectId, sc);
+      l3Content += slotAtoms.map(a => a.content).join('\n\n');
+    }
   }
 
-  return sections.join('\n\n---\n\n');
+  const prompt = `${l1Content}\n\n${l2Content}\n\n${l3Content}`.trim();
+  const totalTokens = Math.ceil(prompt.length / 2);
+
+  return { prompt, layers: { L1: l1Content, L2: l2Content, L3: l3Content }, totalTokens, thinkingModel };
 }
 
+// ━━━ 按 FetchRule 精确检索原子块 ━━━
 async function fetchAtomsForSlot(
-  slotConfig: any,
-  projectId: string
-): Promise<any[]> {
-  const rule = slotConfig.fetchRules[0];
-  if (!rule) return [];
+  projectId: string,
+  slotConfig: any
+): Promise<Array<{ content: string }>> {
+  const rules = slotConfig.fetchRules || [];
+  if (rules.length === 0) return [];
 
-  const layers: string[] = rule.layers?.length ? rule.layers : ['A', 'B', 'C', 'D'];
+  const where: any = {
+    projectId,
+    status: 'ACTIVE',
+  };
 
-  // 取料：只取 active 状态
-  const candidates = await prisma.atom.findMany({
-    where: {
-      projectId,
-      status: 'ACTIVE',
-      layer: { in: layers as any[] },
-      slotMappings: { hasSome: [slotConfig.slotKey] },
-      ...(rule.dimensions?.length ? { dimensions: { hasSome: rule.dimensions } } : {}),
-    },
-    take: rule.topN || 3,
+  // 合并所有 FetchRule 的条件
+  for (const rule of rules) {
+    if (rule.layers?.length) where.layer = { in: rule.layers };
+    if (rule.categories?.length) where.category = { in: rule.categories };
+    if (rule.subcategories?.length) where.subcategory = { in: rule.subcategories };
+  }
+
+  const topN = rules[0]?.topN ?? 5;
+
+  return prisma.atom.findMany({
+    where,
+    take: topN,
     orderBy: { updatedAt: 'desc' },
+    select: { content: true },
   });
+}
 
-  // 冲突仲裁：D > C > B > A
-  const priority = slotConfig.conflictPriority as string[];
-  return candidates.sort(
-    (a, b) =>
-      (priority.indexOf(b.layer) ?? -1) - (priority.indexOf(a.layer) ?? -1)
-  );
+function truncateToTokens(text: string, maxTokens: number): string {
+  // 粗估：1 中文字 ≈ 2 token，1 英文词 ≈ 1 token
+  const estimated = Math.ceil(text.length / 2);
+  if (estimated <= maxTokens) return text;
+  const ratio = maxTokens / estimated;
+  return text.slice(0, Math.floor(text.length * ratio));
 }
