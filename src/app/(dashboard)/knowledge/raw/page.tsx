@@ -73,6 +73,7 @@ export default function RawMaterialsPage() {
       page,
       search: debouncedSearch || undefined,
       format: formatFilter || undefined,
+      materialType: typeFilter || undefined,
       conversionStatus: statusFilter || undefined,
       experienceSource: expSourceFilter || undefined,
     },
