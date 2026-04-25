@@ -1,38 +1,62 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useProjectStore } from "@/stores/projectStore";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { DataTable, type Column } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Pagination } from "@/components/ui/Pagination";
+import { useRouter } from "next/navigation";
 import {
   Upload, Search, FileText, FileSpreadsheet, Headphones, Image, Globe,
-  Trash2, Eye, RotateCcw, X, AlertCircle
+  Trash2, Eye, RotateCcw, X, AlertCircle, ChevronLeft, ChevronRight,
+  Play, ExternalLink, File, Presentation
 } from "lucide-react";
 
 const FORMAT_ICONS: Record<string, React.ReactNode> = {
   WORD: <FileText className="h-4 w-4 text-blue-500" />,
   PDF: <FileText className="h-4 w-4 text-red-500" />,
   EXCEL: <FileSpreadsheet className="h-4 w-4 text-green-500" />,
-  PPT: <FileText className="h-4 w-4 text-orange-500" />,
+  PPT: <Presentation className="h-4 w-4 text-orange-500" />,
   AUDIO: <Headphones className="h-4 w-4 text-purple-500" />,
-  VIDEO: <Headphones className="h-4 w-4 text-pink-500" />,
-  SCREENSHOT: <Image className="h-4 w-4 text-orange-500" />,
-  WEB_LINK: <Globe className="h-4 w-4 text-cyan-500" />,
+  VIDEO: <Play className="h-4 w-4 text-pink-500" />,
+  SCREENSHOT: <Image className="h-4 w-4 text-cyan-500" />,
+  WEB_LINK: <Globe className="h-4 w-4 text-gray-500" />,
 };
 
+const MATERIAL_TYPE_LABELS: Record<string, string> = {
+  THEORY: "理论知识", CASE_STUDY: "案例分析", METHODOLOGY: "方法论",
+  FAQ: "常见问题", SCRIPT: "脚本话术", REGULATION: "规章制度",
+  PRODUCT_DOC: "产品文档", TRAINING_MATERIAL: "培训材料",
+  MEETING_RECORD: "会议纪要", CUSTOMER_VOICE: "客户声音",
+  INDUSTRY_REPORT: "行业报告", COMPETITOR_ANALYSIS: "竞品分析",
+  INTERNAL_WIKI: "内部知识库", OTHER: "其他",
+};
+
+const EXP_SOURCE_LABELS: Record<string, string> = {
+  E1_COMPANY: "E1 企业", E2_INDUSTRY: "E2 行业", E3_CROSS_INDUSTRY: "E3 跨行业",
+};
+
+function formatFileSize(bytes: number | null | undefined): string {
+  if (!bytes) return "-";
+  if (bytes > 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
+  return (bytes / 1024).toFixed(0) + " KB";
+}
+
+function getMarkdownPreview(content: string | null | undefined, lines: number = 3): string {
+  if (!content) return "";
+  return content.split("\n").filter(l => l.trim()).slice(0, lines).join("\n");
+}
+
 export default function RawMaterialsPage() {
+  const router = useRouter();
   const { currentProject } = useProjectStore();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [formatFilter, setFormatFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
   const [showUpload, setShowUpload] = useState(false);
-  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // 搜索防抖 300ms
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(timer);
@@ -47,7 +71,7 @@ export default function RawMaterialsPage() {
       format: formatFilter || undefined,
       conversionStatus: statusFilter || undefined,
     },
-    { enabled: !!currentProject, refetchInterval: 3000 }
+    { enabled: !!currentProject, refetchInterval: 5000 }
   );
 
   const startConversion = trpc.raw.startConversion.useMutation({
@@ -55,169 +79,279 @@ export default function RawMaterialsPage() {
   });
 
   const deleteRaw = trpc.raw.delete.useMutation({
-    onSuccess: () => utils.raw.list.invalidate(),
+    onSuccess: () => {
+      utils.raw.list.invalidate();
+      setSelectedId(null);
+    },
   });
 
-  const previewData = trpc.raw.getById.useQuery(
-    { id: previewId! },
-    { enabled: !!previewId }
-  );
-
-  const columns: Column<any>[] = [
-    {
-      key: "title",
-      label: "素材名称",
-      render: (r) => (
-        <div className="flex items-center gap-2">
-          {FORMAT_ICONS[r.format] ?? <FileText className="h-4 w-4" />}
-          <div>
-            {r.title}
-            {r.originalFileName && (
-              <p className="text-xs text-gray-400 truncate max-w-[200px]">{r.originalFileName}</p>
-            )}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "materialType",
-      label: "材料类型",
-      render: (r) => r.materialType,
-    },
-    {
-      key: "experienceSource",
-      label: "经验源",
-      render: (r) => r.experienceSource,
-    },
-    {
-      key: "fileSize",
-      label: "大小",
-      render: (r) => (
-        <span>
-          {r.fileSize ? (r.fileSize > 1024 * 1024 ? `${(r.fileSize / 1024 / 1024).toFixed(1)} MB` : `${(r.fileSize / 1024).toFixed(0)} KB`) : "-"}
-        </span>
-      ),
-    },
-    {
-      key: "conversionStatus",
-      label: "转换状态",
-      render: (r) => <StatusBadge status={r.conversionStatus} />,
-    },
-    {
-      key: "_count",
-      label: "关联",
-      render: (r) => (
-        <span>
-          Atoms:{r._count?.atoms ?? 0} QA:{r._count?.qaPairs ?? 0}
-        </span>
-      ),
-    },
-    {
-      key: "actions",
-      label: "操作",
-      render: (r) => (
-        <div className="flex gap-1">
-          {r.conversionStatus === "PENDING" && (
-            <button
-              onClick={(e) => { e.stopPropagation(); startConversion.mutate({ id: r.id }); }}
-              className="rounded bg-brand px-2 py-1 text-xs text-white hover:bg-brand-dark"
-            >
-              启动加工
-            </button>
-          )}
-          {r.conversionStatus === "CONVERTING" && (
-            <span>
-              转换中…
-            </span>
-          )}
-          {r.conversionStatus === "CONVERTED" && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setPreviewId(r.id); }}
-              className="rounded border border-green-300 bg-green-50 px-2 py-1 text-xs text-green-700 hover:bg-green-100 flex items-center gap-1"
-            >
-              <Eye className="h-3 w-3" />Markdown
-            </button>
-          )}
-          {r.conversionStatus === "FAILED" && (
-            <button
-              onClick={(e) => { e.stopPropagation(); startConversion.mutate({ id: r.id }); }}
-              className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100 flex items-center gap-1"
-            >
-              <RotateCcw className="h-3 w-3" />重试
-            </button>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (confirm(`确定删除「${r.title}」？`)) deleteRaw.mutate({ id: r.id });
-            }}
-            className="rounded border border-red-200 px-2 py-1 text-xs text-red-400 hover:bg-red-50 hover:text-red-600"
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
-        </div>
-      ),
-    },
-  ];
+  const items: any[] = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+  const totalPages = data?.totalPages ?? 1;
+  const selectedItem = items.find((r: any) => r.id === selectedId);
+  const convertedItems = items.filter((r: any) => r.conversionStatus === "CONVERTED");
 
   return (
-    <div>
-      <PageHeader
-        title="Raw 素材管理"
-        description="管理企业上传的原始资料文件，启动格式归一与双轨加工"
-        actions={
-          <button
-            onClick={() => setShowUpload(true)}
-            className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm text-white hover:bg-brand-dark"
-          >
-            <Upload className="h-4 w-4" />
-            上传素材
-          </button>
-        }
-      />
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Raw 素材管理</h1>
+          <p className="text-sm text-gray-500 mt-0.5">管理企业上传的原始资料文件，启动格式归一与双轨加工</p>
+        </div>
+        <button
+          onClick={() => setShowUpload(true)}
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 shadow-sm"
+        >
+          <Upload className="h-4 w-4" />
+          上传素材
+        </button>
+      </div>
 
+      {/* 提示选择 Project */}
       {!currentProject && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3">
-          <AlertCircle className="h-5 w-5 text-yellow-600" />
+        <div className="mx-6 mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          <AlertCircle className="h-4 w-4" />
           请先在顶部选择一个 Project
         </div>
       )}
 
-      <div className="mb-4 flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      {/* 筛选栏 */}
+      <div className="flex items-center gap-3 px-6 py-3 border-b bg-gray-50/50">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索素材名称…"
-            className="h-9 w-full rounded-lg border pl-9 pr-4 text-sm"
+            placeholder="搜索素材名称..."
+            className="h-9 w-full rounded-lg border pl-9 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
         </div>
-        <select
-          value={formatFilter}
-          onChange={(e) => setFormatFilter(e.target.value)}
-          className="h-9 rounded-lg border px-3 text-sm"
-        >
+        <select value={formatFilter} onChange={(e) => setFormatFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
           <option value="">全部格式</option>
-          {["WORD", "PDF", "PPT", "EXCEL", "AUDIO", "VIDEO", "SCREENSHOT", "WEB_LINK"].map((f) => (
-            <option key={f} value={f}>{f}</option>
-          ))}
+          {["WORD","PDF","PPT","EXCEL","AUDIO","VIDEO","SCREENSHOT","WEB_LINK"].map(f => <option key={f} value={f}>{f}</option>)}
         </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-9 rounded-lg border px-3 text-sm"
-        >
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
+          <option value="">全部类型</option>
+          {Object.entries(MATERIAL_TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
           <option value="">全部状态</option>
-          {["PENDING", "CONVERTING", "CONVERTED", "FAILED"].map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
+          {["PENDING","CONVERTING","CONVERTED","FAILED"].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
-      <DataTable columns={columns} data={data?.items ?? []} loading={isLoading} />
+      {/* 主内容区：Master-Detail */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* 左侧：素材列表 */}
+        <div className="flex-1 min-w-0 overflow-y-auto border-r">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-40 text-gray-400 text-sm">加载中...</div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+              <File className="h-8 w-8 mb-2" />
+              <p className="text-sm">暂无素材，请点击右上角上传</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {items.map((r: any) => (
+                <div
+                  key={r.id}
+                  onClick={() => setSelectedId(r.id === selectedId ? null : r.id)}
+                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
+                    r.id === selectedId ? "bg-blue-50 border-l-2 border-l-blue-600" : "hover:bg-gray-50 border-l-2 border-l-transparent"
+                  }`}
+                >
+                  <div className="shrink-0">
+                    {FORMAT_ICONS[r.format] ?? <FileText className="h-4 w-4 text-gray-400" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">{r.title}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-gray-400">{MATERIAL_TYPE_LABELS[r.materialType] || r.materialType}</span>
+                      <span className="text-xs text-gray-300">·</span>
+                      <span className="text-xs text-gray-400">{EXP_SOURCE_LABELS[r.experienceSource] || r.experienceSource}</span>
+                      <span className="text-xs text-gray-300">·</span>
+                      <span className="text-xs text-gray-400">{formatFileSize(r.fileSize)}</span>
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <StatusBadge status={r.conversionStatus} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
-      {data && <Pagination page={page} totalPages={data.totalPages} onChange={setPage} />}
+          {/* 分页 */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 py-3 border-t">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-xs text-gray-500">{page} / {totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30">
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 右侧：详情面板 */}
+        <div className="w-[400px] shrink-0 overflow-y-auto bg-white">
+          {selectedItem ? (
+            <div className="p-5 space-y-5">
+              {/* 标题 */}
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5">{FORMAT_ICONS[selectedItem.format] ?? <FileText className="h-5 w-5" />}</div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-semibold text-gray-900 break-words">{selectedItem.title}</h2>
+                  {selectedItem.originalFileName && (
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">{selectedItem.originalFileName}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* 基本信息 */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">基本信息</h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="text-gray-500">材料类型</div>
+                  <div className="font-medium">{MATERIAL_TYPE_LABELS[selectedItem.materialType] || selectedItem.materialType}</div>
+                  <div className="text-gray-500">经验源</div>
+                  <div className="font-medium">{EXP_SOURCE_LABELS[selectedItem.experienceSource] || selectedItem.experienceSource}</div>
+                  <div className="text-gray-500">格式</div>
+                  <div className="font-medium">{selectedItem.format}</div>
+                  <div className="text-gray-500">大小</div>
+                  <div className="font-medium">{formatFileSize(selectedItem.fileSize)}</div>
+                </div>
+              </div>
+
+              {/* 转换状态 */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">转换状态</h3>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={selectedItem.conversionStatus} />
+                  {selectedItem.conversionStatus === "PENDING" && (
+                    <button
+                      onClick={() => startConversion.mutate({ id: selectedItem.id })}
+                      className="ml-auto flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+                    >
+                      <Play className="h-3 w-3" /> 启动加工
+                    </button>
+                  )}
+                  {selectedItem.conversionStatus === "FAILED" && (
+                    <button
+                      onClick={() => startConversion.mutate({ id: selectedItem.id })}
+                      className="ml-auto flex items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs text-red-600 hover:bg-red-100"
+                    >
+                      <RotateCcw className="h-3 w-3" /> 重试
+                    </button>
+                  )}
+                  {selectedItem.conversionStatus === "CONVERTING" && (
+                    <span className="ml-auto text-xs text-blue-500 animate-pulse">转换中...</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Markdown 预览 */}
+              {selectedItem.conversionStatus === "CONVERTED" && selectedItem.markdownContent && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Markdown 预览</h3>
+                  <div className="rounded-lg border bg-gray-50 p-3 max-h-48 overflow-y-auto">
+                    <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
+                      {selectedItem.markdownContent.slice(0, 800)}
+                      {selectedItem.markdownContent.length > 800 && "\n\n..."}
+                    </pre>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    共 {selectedItem.markdownContent.length} 字
+                  </p>
+                </div>
+              )}
+
+              {/* 关联资产 */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">关联资产</h3>
+                <div className="flex gap-4 text-sm">
+                  <span className="text-gray-600">Atoms: <strong>{selectedItem._count?.atoms ?? 0}</strong></span>
+                  <span className="text-gray-600">QA: <strong>{selectedItem._count?.qaPairs ?? 0}</strong></span>
+                </div>
+              </div>
+
+              {/* 操作按钮 */}
+              <div className="flex flex-col gap-2 pt-2 border-t">
+                {selectedItem.conversionStatus === "CONVERTED" && (
+                  <button
+                    onClick={() => router.push("/knowledge/workbench?rawId=" + selectedItem.id)}
+                    className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm text-white hover:bg-blue-700 shadow-sm"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    进入知识加工工作台
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (confirm("确定删除「" + selectedItem.title + "」？")) {
+                      deleteRaw.mutate({ id: selectedItem.id });
+                    }
+                  }}
+                  className="flex items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-500 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  删除素材
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+              <Eye className="h-8 w-8 mb-2" />
+              <p className="text-sm">点击左侧素材查看详情</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Markdown 画廊区 */}
+      {convertedItems.length > 0 && (
+        <div className="border-t bg-gray-50/50">
+          <div className="px-6 py-4">
+            <h2 className="text-sm font-semibold text-gray-700">
+              已转换 Markdown（{convertedItems.length} 篇）
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-3">
+              {convertedItems.map((r: any) => (
+                <div key={r.id} className="rounded-xl border bg-white p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-2">
+                    {FORMAT_ICONS[r.format] ?? <FileText className="h-4 w-4" />}
+                    <span className="text-sm font-medium text-gray-900 truncate">{r.title}</span>
+                  </div>
+                  {r.markdownContent && (
+                    <pre className="text-xs text-gray-500 whitespace-pre-wrap line-clamp-3 font-mono mb-2 leading-relaxed">
+                      {getMarkdownPreview(r.markdownContent)}
+                    </pre>
+                  )}
+                  <div className="flex items-center justify-between mt-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">
+                        {MATERIAL_TYPE_LABELS[r.materialType] || r.materialType}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {r.markdownContent ? r.markdownContent.length + " 字" : ""}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => router.push("/knowledge/workbench?rawId=" + r.id)}
+                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      进入工作台 <ExternalLink className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 上传弹窗 */}
       {showUpload && (
@@ -226,47 +360,15 @@ export default function RawMaterialsPage() {
           onSuccess={() => utils.raw.list.invalidate()}
         />
       )}
-
-      {/* Markdown 预览弹窗 */}
-      {previewId && previewData.data && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-[800px] max-h-[80vh] flex flex-col rounded-2xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <h2 className="text-lg font-bold">{previewData.data.title} — Markdown 预览</h2>
-              <button
-                onClick={() => setPreviewId(null)}
-                className="rounded-lg p-2 hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              {previewData.data.markdownContent ? (
-                <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed text-gray-700 bg-gray-50 rounded-lg p-4">
-                  {previewData.data.markdownContent}
-                </pre>
-              ) : (
-                <div className="text-center py-12 text-gray-400">
-                  <p>暂无 Markdown 内容</p>
-                  <p className="text-xs mt-1">请先点击「启动加工」进行格式转换</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-/* ========== 上传弹窗组件 ========== */
+/* ========== 上传弹窗组件（保持现有功能不变） ========== */
 function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const { currentProject } = useProjectStore();
   const createRaw = trpc.raw.create.useMutation({
-    onSuccess: () => {
-      onSuccess();
-      onClose();
-    },
+    onSuccess: () => { onSuccess(); onClose(); },
   });
 
   const [file, setFile] = useState<File | null>(null);
@@ -281,7 +383,6 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
     experienceSource: "E1_COMPANY",
   });
 
-  // 格式自动检测
   const FORMAT_MAP: Record<string, string> = {
     ".doc": "WORD", ".docx": "WORD", ".txt": "WORD", ".md": "WORD",
     ".pdf": "PDF",
@@ -296,19 +397,11 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
   function handleFileSelect(selectedFile: File) {
     setFile(selectedFile);
     setUploadError("");
-
-    // 自动填充标题
     const nameWithoutExt = selectedFile.name.replace(/\.[^./]+$/, "");
-    if (!form.title) {
-      setForm((prev) => ({ ...prev, title: nameWithoutExt }));
-    }
-
-    // 自动检测格式
+    if (!form.title) setForm(prev => ({ ...prev, title: nameWithoutExt }));
     const ext = "." + selectedFile.name.split(".").pop()?.toLowerCase();
     const detected = FORMAT_MAP[ext];
-    if (detected) {
-      setForm((prev) => ({ ...prev, format: detected }));
-    }
+    if (detected) setForm(prev => ({ ...prev, format: detected }));
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -320,26 +413,20 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
 
   async function handleSubmit() {
     if (!file || !currentProject) {
-      setUploadError("请先选择文件并确保已选择项目");
+      setUploadError("Please select a file and ensure a project is selected");
       return;
     }
-
     setUploading(true);
     setUploadError("");
     try {
-      // Step 1: 上传文件
       const formData = new FormData();
       formData.append("file", file);
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-
       if (!uploadRes.ok) {
-        const err = await uploadRes.json().catch(() => ({ error: "响应格式错误" }));
-        throw new Error(err.error || "上传失败：" + uploadRes.status);
+        const err = await uploadRes.json().catch(() => ({ error: "Response format error" }));
+        throw new Error(err.error || "Upload failed: " + uploadRes.status);
       }
-
       const uploadData = await uploadRes.json();
-
-      // Step 2: 创建 Raw 记录
       await createRaw.mutateAsync({
         title: form.title || file.name,
         projectId: currentProject.id,
@@ -351,8 +438,8 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
         fileSize: uploadData.size,
       });
     } catch (err: any) {
-      console.error("上传错误:", err);
-      setUploadError(err.message || "操作失败");
+      console.error("Upload error:", err);
+      setUploadError(err.message || "Operation failed");
     } finally {
       setUploading(false);
     }
@@ -360,116 +447,69 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-[520px] rounded-2xl bg-white p-6 shadow-xl">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold">上传素材</h2>
-          <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100 text-gray-400">
-            <X className="h-5 w-5" />
-          </button>
+          <h2 className="text-lg font-semibold">上传素材</h2>
+          <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100"><X className="h-5 w-5 text-gray-400" /></button>
         </div>
 
-        {/* 拖拽上传区 */}
         <div
           onClick={() => fileInputRef.current?.click()}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           className={`rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-colors ${
-            dragOver ? "border-brand bg-blue-50" : file ? "border-green-300 bg-green-50" : "border-gray-300 hover:border-gray-400"
+            dragOver ? "border-blue-500 bg-blue-50" : file ? "border-green-300 bg-green-50" : "border-gray-300 hover:border-gray-400"
           }`}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            accept=".doc,.docx,.pdf,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.md,.mp3,.wav,.m4a,.mp4,.avi,.mov,.png,.jpg,.jpeg,.gif,.webp"
-            onChange={(e) => {
-              const selected = e.target.files?.[0];
-              if (selected) handleFileSelect(selected);
-            }}
-          />
+          <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
           {file ? (
             <div>
-              <FileText className="mx-auto h-10 w-10 text-green-500" />
-              <p className="mt-2 text-sm font-medium text-green-700">{file.name}</p>
-              <p className="text-xs text-green-500">
-                {(file.size / 1024).toFixed(0)} KB · 点击重新选择
-              </p>
+              <FileText className="h-8 w-8 mx-auto mb-2 text-green-500" />
+              <p className="text-sm font-medium">{file.name}</p>
+              <p className="text-xs text-gray-400 mt-1">{formatFileSize(file.size)} · 点击重新选择</p>
             </div>
           ) : (
             <div>
-              <Upload className="mx-auto h-10 w-10 text-gray-300" />
-              <p className="mt-2 text-sm text-gray-500">拖拽文件到此处，或点击选择文件</p>
-              <p className="text-xs text-gray-400">
-                支持 Word / PDF / PPT / Excel / 音视频 / 截图
-              </p>
+              <Upload className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm text-gray-600">拖拽文件到此处，或点击选择文件</p>
+              <p className="text-xs text-gray-400 mt-1">支持 Word / PDF / PPT / Excel / 音视频 / 截图</p>
             </div>
           )}
         </div>
 
-        {/* 表单 */}
         <div className="mt-4 space-y-3">
           <input
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             placeholder="素材名称（可自动填充）"
-            className="w-full rounded-lg border px-3 py-2 text-sm"
+            className="w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
-
-          <div className="grid grid-cols-3 gap-3">
-            <select
-              value={form.format}
-              onChange={(e) => setForm({ ...form, format: e.target.value })}
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              {["WORD", "PDF", "PPT", "EXCEL", "AUDIO", "VIDEO", "SCREENSHOT", "WEB_LINK"].map(
-                (f) => <option key={f} value={f}>{f}</option>
-              )}
+          <div className="grid grid-cols-3 gap-2">
+            <select value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })} className="rounded-lg border px-3 py-2 text-sm">
+              {["WORD","PDF","PPT","EXCEL","AUDIO","VIDEO","SCREENSHOT","WEB_LINK"].map(f => <option key={f} value={f}>{f}</option>)}
             </select>
-
-            <select
-              value={form.materialType}
-              onChange={(e) => setForm({ ...form, materialType: e.target.value })}
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              {[
-                "THEORY", "CASE_STUDY", "METHODOLOGY", "FAQ", "SCRIPT", "REGULATION",
-                "PRODUCT_DOC", "TRAINING_MATERIAL", "MEETING_RECORD", "CUSTOMER_VOICE",
-                "INDUSTRY_REPORT", "COMPETITOR_ANALYSIS", "INTERNAL_WIKI", "OTHER",
-              ].map((m) => <option key={m} value={m}>{m}</option>)}
+            <select value={form.materialType} onChange={(e) => setForm({ ...form, materialType: e.target.value })} className="rounded-lg border px-3 py-2 text-sm">
+              {Object.entries(MATERIAL_TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
             </select>
-
-            <select
-              value={form.experienceSource}
-              onChange={(e) => setForm({ ...form, experienceSource: e.target.value })}
-              className="rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="E1_COMPANY">E1 企业经验</option>
-              <option value="E2_INDUSTRY">E2 行业经验</option>
-              <option value="E3_CROSS_INDUSTRY">E3 跨行业</option>
+            <select value={form.experienceSource} onChange={(e) => setForm({ ...form, experienceSource: e.target.value })} className="rounded-lg border px-3 py-2 text-sm">
+              {Object.entries(EXP_SOURCE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
         </div>
 
         {uploadError && (
-          <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 flex items-center gap-1">
-            <AlertCircle className="h-3.5 w-3.5" />{uploadError}
-          </div>
+          <div className="mt-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">{uploadError}</div>
         )}
 
-        <div className="mt-6 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
-          >
-            取消
-          </button>
+        <div className="flex justify-end gap-3 mt-5">
+          <button onClick={onClose} className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50">取消</button>
           <button
             onClick={handleSubmit}
-            disabled={!file || !form.title || uploading}
-            className="rounded-lg bg-brand px-4 py-2 text-sm text-white hover:bg-brand-dark disabled:opacity-50"
+            disabled={!file || uploading}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {uploading ? "上传中…" : "上传并保存"}
+            {uploading ? "上传中..." : "上传并保存"}
           </button>
         </div>
       </div>
