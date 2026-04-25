@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 上传到 Vercel Blob
-    const blob = await put(file.name, file, { access: "public" });
+    const blob = await put(file.name, file, { access: "private" });
 
     // 检测格式
     const ext = path.extname(file.name).toUpperCase().substring(1);
