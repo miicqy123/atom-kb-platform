@@ -92,6 +92,14 @@ export default function RawMaterialsPage() {
   const totalPages = data?.totalPages ?? 1;
   const selectedItem = items.find((r: any) => r.id === selectedId);
   const convertedItems = items.filter((r: any) => r.conversionStatus === "CONVERTED");
+  const kanbanGroups = Object.entries(
+    items.reduce((acc: Record<string, any[]>, r: any) => {
+      const key = r.materialType || "OTHER";
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(r);
+      return acc;
+    }, {})
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -443,7 +451,46 @@ export default function RawMaterialsPage() {
           )}
         </div>
       )}
-      {viewMode === "kanban" && <div className="p-8 text-center text-gray-400">看板视图（开发中）</div>}
+      {viewMode === "kanban" && (
+        <div className="flex gap-4 p-4 overflow-x-auto min-h-[500px]">
+          {isLoading ? (
+            <div className="flex-1 text-center py-12 text-gray-400">加载中...</div>
+          ) : kanbanGroups.length === 0 ? (
+            <div className="flex-1 text-center py-12 text-gray-400">暂无素材</div>
+          ) : kanbanGroups.map(([type, groupItems]) => (
+            <div key={type} className="flex-shrink-0 w-[280px] bg-gray-50 rounded-xl p-3">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <span className="font-medium text-sm text-gray-700">
+                  {MATERIAL_TYPE_LABELS[type] || type}
+                </span>
+                <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded-full">
+                  {groupItems.length}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {groupItems.map((r: any) => (
+                  <div
+                    key={r.id}
+                    onClick={() => { setViewMode("table"); setSelectedId(r.id); }}
+                    className="bg-white rounded-lg border border-gray-200 p-3 cursor-pointer hover:shadow-sm transition-shadow"
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-base">{FORMAT_ICONS[r.format] ?? <File className="w-4 h-4" />}</span>
+                      <span className="text-sm font-medium truncate">{r.title}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <StatusBadge status={r.conversionStatus} />
+                      <span className="text-gray-400">
+                        {EXP_SOURCE_LABELS[r.experienceSource]?.replace(/^E\d\s/, "") || r.experienceSource} · {formatFileSize(r.fileSize)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Markdown 画廊区 */}
       {convertedItems.length > 0 && (
