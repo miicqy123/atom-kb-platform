@@ -12,7 +12,7 @@ export async function stepReverse(content: string): Promise<{
   slots: Record<string, string>;
   rules: string[];
 }> {
-  const { callLLM } = await import('@/services/modelGateway');
+  const { callLLM } = await import('@/server/services/modelGateway');
 
   const systemPrompt = '你是 STEP 反推专家。请按 STEP 方法分析以下内容，并反向生成能复现该内容的结构化提示词。';
 

@@ -29,7 +29,7 @@ export async function scorePrompt(promptText: string): Promise<{
   dimensions: ScoreDimensions;
   diagnosis: string[];
 }> {
-  const { callLLM } = await import('@/services/modelGateway');
+  const { callLLM } = await import('@/server/services/modelGateway');
 
   const systemPrompt = `你是提示词质量评分专家。请对以下提示词进行 7 维度评分（1-5分）。
 
@@ -85,7 +85,7 @@ function selectOptimizer(score: number, diagnosis: string[]): string {
 
 // ━━━ 优化器执行 ━━━
 async function runOptimizer(optimizer: string, promptText: string, diagnosis: string[]): Promise<string> {
-  const { callLLM } = await import('@/services/modelGateway');
+  const { callLLM } = await import('@/server/services/modelGateway');
 
   const optimizerSystem: Record<string, string> = {
     LYRA: '你是 Lyra 提示词优化器。请根据以下诊断结果优化提示词。',
