@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     const formatMap: Record<string, string> = {
       ".doc": "WORD", ".docx": "WORD",
       ".pdf": "PDF",
-      ".ppt": "WORD", ".pptx": "PPT",
+      ".ppt": "PPT", ".pptx": "PPT",
       ".xls": "EXCEL", ".xlsx": "EXCEL", ".csv": "EXCEL",
       ".mp3": "AUDIO", ".wav": "AUDIO", ".m4a": "AUDIO", ".flac": "AUDIO",
       ".mp4": "VIDEO", ".avi": "VIDEO", ".mov": "VIDEO", ".mkv": "VIDEO",

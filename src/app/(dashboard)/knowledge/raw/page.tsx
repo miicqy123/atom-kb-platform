@@ -319,7 +319,10 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
   }
 
   async function handleSubmit() {
-    if (!file || !currentProject) return;
+    if (!file || !currentProject) {
+      setUploadError("请先选择文件并确保已选择项目");
+      return;
+    }
 
     setUploading(true);
     setUploadError("");
@@ -330,8 +333,8 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
 
       if (!uploadRes.ok) {
-        const err = await uploadRes.json();
-        throw new Error(err.error || "上传失败");
+        const err = await uploadRes.json().catch(() => ({ error: "响应格式错误" }));
+        throw new Error(err.error || "上传失败：" + uploadRes.status);
       }
 
       const uploadData = await uploadRes.json();
@@ -348,6 +351,7 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
         fileSize: uploadData.size,
       });
     } catch (err: any) {
+      console.error("上传错误:", err);
       setUploadError(err.message || "操作失败");
     } finally {
       setUploading(false);
