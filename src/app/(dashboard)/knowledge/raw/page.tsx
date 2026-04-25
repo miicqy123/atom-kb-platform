@@ -58,6 +58,7 @@ export default function RawMaterialsPage() {
   const [viewMode, setViewMode] = useState<"table" | "card" | "kanban">("table");
   const [showUpload, setShowUpload] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mdSearch, setMdSearch] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -95,7 +96,9 @@ export default function RawMaterialsPage() {
   const items: any[] = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
   const totalPages = data?.totalPages ?? 1;
   const selectedItem = items.find((r: any) => r.id === selectedId);
-  const convertedItems = items.filter((r: any) => r.conversionStatus === "CONVERTED");
+  const convertedItems = items
+    .filter((r: any) => r.conversionStatus === "CONVERTED")
+    .filter((r: any) => !mdSearch || r.title.toLowerCase().includes(mdSearch.toLowerCase()) || r.markdownContent?.toLowerCase().includes(mdSearch.toLowerCase()));
   const kanbanGroups = Object.entries(
     items.reduce((acc: Record<string, any[]>, r: any) => {
       const key = r.materialType || "OTHER";
@@ -553,12 +556,27 @@ export default function RawMaterialsPage() {
       {convertedItems.length > 0 && (
         <div className="border-t bg-gray-50/50">
           <div className="px-6 py-4">
-            <h2 className="text-sm font-semibold text-gray-700">
-              已转换 Markdown（{convertedItems.length} 篇）
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-700">
+                已转换 Markdown（{convertedItems.length} 篇）
+              </h2>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  value={mdSearch}
+                  onChange={(e) => setMdSearch(e.target.value)}
+                  placeholder="搜索Markdown..."
+                  className="h-8 w-48 rounded-lg border pl-8 pr-3 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-3">
               {convertedItems.map((r: any) => (
-                <div key={r.id} className="rounded-xl border bg-white p-4 hover:shadow-md transition-shadow">
+                <div
+                  key={r.id}
+                  onClick={() => router.push("/knowledge/workbench?rawId=" + r.id)}
+                  className="rounded-xl border border-gray-200 bg-white p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group"
+                >
                   <div className="flex items-center gap-2 mb-2">
                     {FORMAT_ICONS[r.format] ?? <FileText className="h-4 w-4" />}
                     <span className="text-sm font-medium text-gray-900 truncate">{r.title}</span>
@@ -577,12 +595,9 @@ export default function RawMaterialsPage() {
                         {r.markdownContent ? r.markdownContent.length + " 字" : ""}
                       </span>
                     </div>
-                    <button
-                      onClick={() => router.push("/knowledge/workbench?rawId=" + r.id)}
-                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
-                    >
-                      进入工作台 <ExternalLink className="h-3 w-3" />
-                    </button>
+                    <span className="flex items-center gap-1 text-xs text-blue-600 group-hover:text-blue-700 font-medium">
+                      进入工作台 <ExternalLink className="w-3 h-3" />
+                    </span>
                   </div>
                 </div>
               ))}
