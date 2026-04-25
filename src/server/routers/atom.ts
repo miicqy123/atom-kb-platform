@@ -9,6 +9,18 @@ export const atomRouter = router({
       layer: z.enum(['A', 'B', 'C', 'D']).optional(),
       granularity: z.enum(['ATOM', 'MODULE', 'PACK']).optional(),
       status: z.enum(['DRAFT', 'TESTING', 'ACTIVE', 'ARCHIVED']).optional(),
+      category: z.enum([
+        'CAT_WHO', 'CAT_WHAT', 'CAT_HOW',
+        'CAT_STYLE', 'CAT_FENCE', 'CAT_PROOF'
+      ]).optional(),
+      subcategory: z.enum([
+        'WHO_BRAND', 'WHO_ROLE', 'WHO_AUDIENCE', 'WHO_TERM',
+        'WHAT_PRODUCT', 'WHAT_USP', 'WHAT_PRICE', 'WHAT_CERT',
+        'HOW_SOP', 'HOW_METHOD', 'HOW_TACTIC', 'HOW_BEST',
+        'STYLE_HOOK', 'STYLE_WORD', 'STYLE_TONE', 'STYLE_RHYTHM',
+        'FENCE_BAN', 'FENCE_ALLOW', 'FENCE_LAW', 'FENCE_BLUR',
+        'PROOF_CASE', 'PROOF_DATA', 'PROOF_FAIL', 'PROOF_COMPARE'
+      ]).optional(),
       search: z.string().optional(), // 添加搜索参数
       limit: z.number().optional().default(10),
       offset: z.number().optional().default(0),
@@ -28,6 +40,12 @@ export const atomRouter = router({
 
       if (status) {
         whereClause.status = status;
+      }
+      if (input.category) {
+        whereClause.category = input.category;
+      }
+      if (input.subcategory) {
+        whereClause.subcategory = input.subcategory;
       }
 
       if (search) {
@@ -89,6 +107,17 @@ export const atomRouter = router({
       slotMappings: z.array(z.string()).optional(),
       wordCount: z.number().optional(),
       tokenEstimate: z.number().optional(),
+      category: z.enum([
+        'CAT_WHO','CAT_WHAT','CAT_HOW','CAT_STYLE','CAT_FENCE','CAT_PROOF'
+      ]).optional(),
+      subcategory: z.enum([
+        'WHO_BRAND','WHO_ROLE','WHO_AUDIENCE','WHO_TERM',
+        'WHAT_PRODUCT','WHAT_USP','WHAT_PRICE','WHAT_CERT',
+        'HOW_SOP','HOW_METHOD','HOW_TACTIC','HOW_BEST',
+        'STYLE_HOOK','STYLE_WORD','STYLE_TONE','STYLE_RHYTHM',
+        'FENCE_BAN','FENCE_ALLOW','FENCE_LAW','FENCE_BLUR',
+        'PROOF_CASE','PROOF_DATA','PROOF_FAIL','PROOF_COMPARE'
+      ]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       // 检查用户是否有权限在该项目中创建原子块
@@ -114,6 +143,8 @@ export const atomRouter = router({
           slotMappings: input.slotMappings || [],
           wordCount: input.wordCount,
           tokenEstimate: input.tokenEstimate,
+          category: input.category,
+          subcategory: input.subcategory,
         },
       });
     }),
@@ -133,6 +164,17 @@ export const atomRouter = router({
       slotMappings: z.array(z.string()).optional(),
       wordCount: z.number().optional(),
       tokenEstimate: z.number().optional(),
+      category: z.enum([
+        'CAT_WHO','CAT_WHAT','CAT_HOW','CAT_STYLE','CAT_FENCE','CAT_PROOF'
+      ]).optional(),
+      subcategory: z.enum([
+        'WHO_BRAND','WHO_ROLE','WHO_AUDIENCE','WHO_TERM',
+        'WHAT_PRODUCT','WHAT_USP','WHAT_PRICE','WHAT_CERT',
+        'HOW_SOP','HOW_METHOD','HOW_TACTIC','HOW_BEST',
+        'STYLE_HOOK','STYLE_WORD','STYLE_TONE','STYLE_RHYTHM',
+        'FENCE_BAN','FENCE_ALLOW','FENCE_LAW','FENCE_BLUR',
+        'PROOF_CASE','PROOF_DATA','PROOF_FAIL','PROOF_COMPARE'
+      ]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, ...updateData } = input;
@@ -243,10 +285,17 @@ export const atomRouter = router({
         },
       });
 
+      const byCategory = await ctx.prisma.atom.groupBy({
+        where: { projectId },
+        by: ['category'],
+        _count: { _all: true },
+      });
+
       return {
         total,
         byLayer: stats,
         byStatus: statusCount,
+        byCategory,
       };
     }),
 
@@ -328,6 +377,17 @@ export const atomRouter = router({
       slotMappings: z.array(z.string()),
       dimensions: z.array(z.number()),
       granularity: z.enum(['ATOM','MODULE','PACK']),
+      category: z.enum([
+        'CAT_WHO','CAT_WHAT','CAT_HOW','CAT_STYLE','CAT_FENCE','CAT_PROOF'
+      ]).optional(),
+      subcategory: z.enum([
+        'WHO_BRAND','WHO_ROLE','WHO_AUDIENCE','WHO_TERM',
+        'WHAT_PRODUCT','WHAT_USP','WHAT_PRICE','WHAT_CERT',
+        'HOW_SOP','HOW_METHOD','HOW_TACTIC','HOW_BEST',
+        'STYLE_HOOK','STYLE_WORD','STYLE_TONE','STYLE_RHYTHM',
+        'FENCE_BAN','FENCE_ALLOW','FENCE_LAW','FENCE_BLUR',
+        'PROOF_CASE','PROOF_DATA','PROOF_FAIL','PROOF_COMPARE'
+      ]).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       return ctx.prisma.atom.update({
@@ -337,6 +397,8 @@ export const atomRouter = router({
           slotMappings: input.slotMappings,
           dimensions: input.dimensions,
           granularity: input.granularity,
+          category: input.category,
+          subcategory: input.subcategory,
         },
       });
     }),
