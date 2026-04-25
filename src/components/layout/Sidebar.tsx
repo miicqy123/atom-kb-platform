@@ -58,7 +58,7 @@ const NAV_SECTIONS = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { projectId } = useProjectStore();
+  const { currentProject } = useProjectStore();
 
   return (
     <aside className="w-56 border-r bg-white flex flex-col h-full">
@@ -96,10 +96,10 @@ export function Sidebar() {
         <div className="flex items-center gap-2 text-xs text-gray-400">
           <Clock className="h-3.5 w-3.5" /> 最近访问
         </div>
-        {projectId && (
+        {currentProject?.id && (
           <div className="mt-2 pt-2 border-t">
             <div className="text-[10px] text-gray-400 uppercase">Project</div>
-            <div className="text-xs font-medium text-gray-700 truncate">{projectId}</div>
+            <div className="text-xs font-medium text-gray-700 truncate">{currentProject.id}</div>
           </div>
         )}
       </div>
