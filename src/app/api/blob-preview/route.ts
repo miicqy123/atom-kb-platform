@@ -1,27 +1,29 @@
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
-import { getDownloadUrl } from "@vercel/blob";
-
-export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  const url = req.nextUrl.searchParams.get("url");
+  if (!url) {
+    return NextResponse.json({ error: "Missing url param" }, { status: 400 });
+  }
+
   try {
-    const url = req.nextUrl.searchParams.get("url");
-    if (!url) {
-      return NextResponse.json({ error: "缺少 url 参数" }, { status: 400 });
+    const response = await fetch(url);
+    if (!response.ok) {
+      return NextResponse.json({ error: "Fetch failed: " + response.status }, { status: response.status });
     }
 
-    // 生成临时下载链接（默认有效期 1 小时）
-    const downloadUrl = await getDownloadUrl(url);
+    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const buffer = await response.arrayBuffer();
 
-    // 直接 302 重定向到签名 URL
-    return NextResponse.redirect(downloadUrl);
-  } catch (error: any) {
-    console.error("Blob preview error:", error);
-    return NextResponse.json(
-      { error: error.message || "获取预览链接失败" },
-      { status: 500 }
-    );
+    return new NextResponse(buffer, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Content-Disposition": "inline",
+        "Cache-Control": "public, max-age=3600",
+      },
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

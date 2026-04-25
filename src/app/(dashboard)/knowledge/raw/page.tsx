@@ -606,6 +606,7 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
 }) {
   const hasMarkdown = !!item.markdownContent;
   const hasOriginal = !!item.originalFileUrl;
+  const proxyUrl = item.originalFileUrl ? `/api/blob-preview?url=${encodeURIComponent(item.originalFileUrl)}` : "";
   const [activePreviewTab, setActivePreviewTab] = useState<"markdown" | "original">(
     hasMarkdown ? "markdown" : "original"
   );
@@ -637,26 +638,20 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
       );
     }
 
-    // 优先直接使用原始 URL（Vercel Blob URL 通常是公开的）
-    const previewUrl = item.originalFileUrl;
     const format = (item.format || "").toUpperCase();
+    const fileName = item.originalFileName || item.title || "";
 
-    // PDF - 浏览器原生 PDF 阅读器
-    if (format === "PDF") {
+    // PDF - 浏览器原生 PDF 阅读器（通过代理）
+    if (format === "PDF" || /\.pdf$/i.test(fileName)) {
       return (
         <div className="w-full h-full flex flex-col">
           <iframe
-            src={previewUrl}
+            src={proxyUrl}
             className="w-full flex-1 border-0 rounded-lg"
             title="PDF 预览"
           />
           <div className="flex items-center justify-center pt-2">
-            <a
-              href={previewUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-blue-600 hover:text-blue-700"
-            >
+            <a href={proxyUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:text-blue-700">
               无法预览？点此在新窗口打开 ↗
             </a>
           </div>
@@ -664,38 +659,12 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
       );
     }
 
-    // Word / Excel / PPT - 微软 Office Online 预览
-    if (["WORD", "EXCEL", "PPT"].includes(format)) {
-      const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(item.originalFileUrl)}`;
-      return (
-        <div className="w-full h-full flex flex-col">
-          <iframe
-            src={officeViewerUrl}
-            className="w-full flex-1 border-0 rounded-lg"
-            title="Office 文档预览"
-            onError={() => console.log("Office preview failed")}
-          />
-          <div className="flex items-center justify-center gap-3 pt-3">
-            <span className="text-xs text-gray-400">预览由 Microsoft Office Online 提供</span>
-            <a
-              href={previewUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-            >
-              无法预览？点此直接下载 ↗
-            </a>
-          </div>
-        </div>
-      );
-    }
-
     // 图片
-    if (format === "SCREENSHOT" || /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(item.originalFileName || "")) {
+    if (format === "SCREENSHOT" || /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(fileName)) {
       return (
         <div className="w-full h-full flex items-center justify-center overflow-auto p-4">
           <img
-            src={previewUrl}
+            src={proxyUrl}
             alt={item.title}
             className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
           />
@@ -704,23 +673,23 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
     }
 
     // 音频
-    if (format === "AUDIO" || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(item.originalFileName || "")) {
+    if (format === "AUDIO" || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(fileName)) {
       return (
         <div className="w-full h-full flex flex-col items-center justify-center gap-6 py-20">
           <Headphones className="w-16 h-16 text-purple-400" />
-          <audio controls className="w-full max-w-md" src={previewUrl}>
+          <audio controls className="w-full max-w-md" src={proxyUrl}>
             您的浏览器不支持音频播放
           </audio>
-          <p className="text-sm text-gray-500">{item.originalFileName || item.title}</p>
+          <p className="text-sm text-gray-500">{fileName}</p>
         </div>
       );
     }
 
     // 视频
-    if (format === "VIDEO" || /\.(mp4|webm|mov|avi|mkv)$/i.test(item.originalFileName || "")) {
+    if (format === "VIDEO" || /\.(mp4|webm|mov|avi|mkv)$/i.test(fileName)) {
       return (
         <div className="w-full h-full flex items-center justify-center p-4">
-          <video controls className="max-w-full max-h-full rounded-lg shadow-sm" src={previewUrl}>
+          <video controls className="max-w-full max-h-full rounded-lg shadow-sm" src={proxyUrl}>
             您的浏览器不支持视频播放
           </video>
         </div>
@@ -737,7 +706,7 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
             title="网页预览"
             sandbox="allow-scripts allow-same-origin"
           />
-          <div className="flex items-center justify-center gap-3 pt-3">
+          <div className="flex items-center justify-center pt-2">
             <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:text-blue-700">
               在新标签页打开 ↗
             </a>
@@ -746,13 +715,40 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
       );
     }
 
-    // 其他格式 - 提供下载/跳转
+    // Word / Excel / PPT 以及其他 Office 格式
+    // 不再用 Office Online（它无法访问私有 Blob URL）
+    // 改用 Google Docs Viewer 尝试预览，同时提供下载降级
+    if (["WORD", "EXCEL", "PPT"].includes(format) || /\.(docx?|xlsx?|pptx?)$/i.test(fileName)) {
+      const googleViewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(item.originalFileUrl)}&embedded=true`;
+      return (
+        <div className="w-full h-full flex flex-col">
+          <iframe
+            src={googleViewerUrl}
+            className="w-full flex-1 border-0 rounded-lg"
+            title="文档预览"
+          />
+          <div className="flex items-center justify-center gap-4 pt-3">
+            <span className="text-xs text-gray-400">预览由 Google Docs Viewer 提供</span>
+            <a
+              href={proxyUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+            >
+              无法预览？点此直接下载 ↗
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    // 兜底：提供下载
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4 py-20">
         <File className="w-16 h-16 text-gray-300" />
-        <p className="text-gray-500">该格式暂不支持在线预览</p>
+        <p className="text-sm text-gray-500">该格式暂不支持在线预览</p>
         <a
-          href={previewUrl}
+          href={proxyUrl}
           target="_blank"
           rel="noreferrer"
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm text-white hover:bg-blue-700 shadow-sm"
@@ -784,7 +780,7 @@ function PreviewModal({ item, onClose, onAddToKb, onGoWorkbench, addingToKb, onS
             <div className="flex items-center gap-2 shrink-0">
               {item.originalFileUrl && (
                 <a
-                  href={item.originalFileUrl}
+                  href={proxyUrl || item.originalFileUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-50"
