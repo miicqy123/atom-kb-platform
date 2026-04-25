@@ -18,9 +18,19 @@ async function extractWordText(buffer: ArrayBuffer) {
 
 async function extractPdfText(buffer: ArrayBuffer) {
   try {
-    const module = await import("pdf-parse");
-    const pdfData = await module.default(Buffer.from(buffer));
-    return pdfData.text;
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+    const lines: string[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .filter((item: any) => "str" in item)
+        .map((item: any) => item.str)
+        .join(" ");
+      if (pageText.trim()) lines.push(pageText.trim());
+    }
+    return lines.join("\n\n");
   } catch (error) {
     console.error("Error parsing PDF:", error);
     return "";
@@ -40,7 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 上传到 Vercel Blob
-    const blob = await put(file.name, file, { access: "private" });
+    const blob = await put(file.name, file, { access: "public", addRandomSuffix: true });
 
     // 检测格式
     const ext = path.extname(file.name).toUpperCase().substring(1);

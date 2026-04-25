@@ -12,12 +12,22 @@ export async function normalizeToMarkdown(
   switch (format) {
     case 'PDF': {
       try {
-        const module = await import('pdf-parse');
-        const data = await module.default(buffer);
-        return data.text;
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+        const lines: string[] = [];
+        for (let i = 1; i <= doc.numPages; i++) {
+          const page = await doc.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items
+            .filter((item: any) => 'str' in item)
+            .map((item: any) => item.str)
+            .join(' ');
+          if (pageText.trim()) lines.push(pageText.trim());
+        }
+        return lines.join('\n\n');
       } catch (e) {
-        console.warn('[Pipeline] pdf-parse not available:', e);
-        return '[PDF内容待解析 - 请安装 pdf-parse]';
+        console.warn('[Pipeline] PDF parse failed:', e);
+        return '[PDF内容待解析]';
       }
     }
     case 'WORD': {
