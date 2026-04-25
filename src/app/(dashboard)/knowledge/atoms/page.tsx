@@ -15,8 +15,9 @@ import {
   CATEGORY_OPTIONS, getSubcategoryOptions,
   CATEGORY_LABEL_MAP, SUBCATEGORY_LABEL_MAP,
 } from "@/lib/categoryMaps";
-import { Plus, Search, LayoutGrid, Table2, Kanban, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, LayoutGrid, Table2, Kanban, Edit, Trash2, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import AtomDialog from "@/components/knowledge/AtomDialog";
 import { useToast } from "@/hooks/use-toast";
 
@@ -55,6 +56,12 @@ export default function AtomsPage() {
       | undefined,
     limit,
     offset
+  }, {
+    enabled: !!projectId
+  });
+
+  const { data: stats } = trpc.atom.getStats.useQuery({
+    projectId: projectId ?? "",
   }, {
     enabled: !!projectId
   });
@@ -193,6 +200,71 @@ export default function AtomsPage() {
           </Button>
         }
       />
+
+      {/* ── 统计面板 ── */}
+      <div className="mb-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="rounded-xl border bg-white p-4">
+          <p className="text-xs text-gray-400 mb-1">原子块总数</p>
+          <p className="text-2xl font-bold">{stats?.total ?? 0}</p>
+        </div>
+        {["A","B","C","D"].map(l => {
+          const count = stats?.byLayer?.find(s => s.layer === l)?._count?._all ?? 0;
+          return (
+            <div key={l} className="rounded-xl border bg-white p-4">
+              <p className="text-xs text-gray-400 mb-1">{l} 层</p>
+              <p className="text-2xl font-bold">{count}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── 按类别分布 ── */}
+      {(() => {
+        const categoryChartData = (stats?.byCategory || [])
+          .filter(item => item.category !== null)
+          .map(item => ({
+            name: CATEGORY_LABEL_MAP[item.category!] || item.category!,
+            value: item._count._all,
+            category: item.category!,
+          }));
+
+        const CATEGORY_COLORS: Record<string, string> = {
+          CAT_WHO: '#3B82F6',
+          CAT_WHAT: '#22C55E',
+          CAT_HOW: '#F97316',
+          CAT_STYLE: '#A855F7',
+          CAT_FENCE: '#EF4444',
+          CAT_PROOF: '#EAB308',
+        };
+
+        return categoryChartData.length > 0 ? (
+          <div className="mb-6">
+            <h3 className="text-sm font-medium text-gray-500 mb-3 flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" /> 按内容类别分布
+            </h3>
+            <div className="bg-white rounded-lg border p-4" style={{ height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categoryChartData} layout="vertical" margin={{ left: 80, right: 20, top: 4, bottom: 4 }}>
+                  <XAxis type="number" />
+                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                    {categoryChartData.map((entry) => (
+                      <Cell key={entry.category} fill={CATEGORY_COLORS[entry.category] || '#94A3B8'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-6 bg-white rounded-lg border p-4">
+            <p className="text-sm text-gray-400 text-center py-8">
+              暂无分类数据，新入库的原子块将自动打标签
+            </p>
+          </div>
+        );
+      })()}
 
       <div className="mb-4 flex items-center gap-3">
         <div className="relative flex-1">
