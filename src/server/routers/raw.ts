@@ -1,260 +1,93 @@
 import { z } from "zod";
-import { protectedProcedure, router, publicProcedure } from "../trpc";
+import { router, publicProcedure } from "../trpc";
 
 export const rawRouter = router({
-  // 获取所有Raw素材
-  getAll: publicProcedure
+  list: publicProcedure
     .input(z.object({
       projectId: z.string(),
-      limit: z.number().optional().default(10),
-      offset: z.number().optional().default(0),
-      search: z.string().optional(), // 添加搜索参数
-      materialType: z.string().optional(), // 添加类型过滤
-      experienceSource: z.string().optional(), // 添加来源过滤
+      format: z.string().optional(),
+      conversionStatus: z.string().optional(),
+      search: z.string().optional(),
+      page: z.number().default(1),
+      pageSize: z.number().default(20),
     }))
     .query(async ({ ctx, input }) => {
-      const { projectId, limit, offset, search, materialType, experienceSource } = input;
+      const where: any = { projectId: input.projectId };
+      if (input.format) where.format = input.format;
+      if (input.conversionStatus) where.conversionStatus = input.conversionStatus;
+      if (input.search) where.title = { contains: input.search, mode: "insensitive" };
 
-      const whereClause: any = { projectId };
+      const [items, total] = await Promise.all([
+        ctx.prisma.raw.findMany({
+          where,
+          skip: (input.page - 1) * input.pageSize,
+          take: input.pageSize,
+          orderBy: { createdAt: "desc" },
+          include: { _count: { select: { atoms: true, qaPairs: true } } },
+        }),
+        ctx.prisma.raw.count({ where }),
+      ]);
 
-      if (search) {
-        whereClause.OR = [
-          { title: { contains: search, mode: 'insensitive' } },
-          { originalFileName: { contains: search, mode: 'insensitive' } },
-        ];
-      }
-
-      if (materialType && materialType !== 'ALL') {
-        whereClause.materialType = materialType;
-      }
-
-      if (experienceSource && experienceSource !== 'ALL') {
-        whereClause.experienceSource = experienceSource;
-      }
-
-      const rawMaterials = await ctx.prisma.raw.findMany({
-        where: whereClause,
-        take: limit,
-        skip: offset,
-        orderBy: { createdAt: 'desc' },
-      });
-
-      const totalCount = await ctx.prisma.raw.count({
-        where: whereClause
-      });
-
-      return {
-        items: rawMaterials,
-        totalCount,
-        hasMore: offset + limit < totalCount
-      };
+      return { items, total, totalPages: Math.ceil(total / input.pageSize) };
     }),
 
-  // 根据ID获取单个Raw素材
-  getById: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-    }))
-    .query(async ({ ctx, input }) => {
-      return ctx.prisma.raw.findUnique({
+  getById: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ ctx, input }) =>
+      ctx.prisma.raw.findUniqueOrThrow({
         where: { id: input.id },
-      });
-    }),
+        include: { atoms: { take: 50 }, qaPairs: { take: 50 } },
+      })
+    ),
 
-  // 创建Raw素材
   create: publicProcedure
     .input(z.object({
-      title: z.string().min(1).max(255),
+      title: z.string(),
       projectId: z.string(),
-      format: z.enum(['WORD', 'PDF', 'PPT', 'EXCEL', 'AUDIO', 'VIDEO', 'SCREENSHOT', 'WEB_LINK']),
-      materialType: z.enum([
-        'THEORY', 'CASE_STUDY', 'METHODOLOGY', 'FAQ', 'SCRIPT',
-        'REGULATION', 'PRODUCT_DOC', 'TRAINING_MATERIAL', 'MEETING_RECORD',
-        'CUSTOMER_VOICE', 'INDUSTRY_REPORT', 'COMPETITOR_ANALYSIS',
-        'INTERNAL_WIKI', 'OTHER'
-      ]),
-      experienceSource: z.enum(['E1_COMPANY', 'E2_INDUSTRY', 'E3_CROSS_INDUSTRY']),
+      format: z.string(),
+      materialType: z.string(),
+      experienceSource: z.string(),
+      originalFileUrl: z.string().optional(),
       originalFileName: z.string().optional(),
-      originalFileUrl: z.string().optional(), // 添加这个字段
-      markdownContent: z.string().optional(),
       fileSize: z.number().optional(),
+      exposureLevel: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const raw = await ctx.prisma.raw.create({
-        data: input as any,
-      });
-
-      // TODO: 上线前恢复审计日志
-      // await ctx.prisma.auditLog.create({
-      //   data: {
-      //     userId: ctx.user.id,
-      //     action: "create",
-      //     entityType: "raw",
-      //     entityId: raw.id,
-      //     entityName: raw.title
-      //   }
-      // });
-
+      const raw = await ctx.prisma.raw.create({ data: input as any });
+      // auditLog 跳过（开发阶段无 session）
       return raw;
     }),
 
-  // 更新Raw素材
-  update: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-      title: z.string().min(1).max(255).optional(),
-      format: z.enum(['WORD', 'PDF', 'PPT', 'EXCEL', 'AUDIO', 'VIDEO', 'SCREENSHOT', 'WEB_LINK']).optional(),
-      materialType: z.enum([
-        'THEORY', 'CASE_STUDY', 'METHODOLOGY', 'FAQ', 'SCRIPT',
-        'REGULATION', 'PRODUCT_DOC', 'TRAINING_MATERIAL', 'MEETING_RECORD',
-        'CUSTOMER_VOICE', 'INDUSTRY_REPORT', 'COMPETITOR_ANALYSIS',
-        'INTERNAL_WIKI', 'OTHER'
-      ]).optional(),
-      experienceSource: z.enum(['E1_COMPANY', 'E2_INDUSTRY', 'E3_CROSS_INDUSTRY']).optional(),
-      originalFileName: z.string().optional(),
-      markdownContent: z.string().optional(),
-      conversionStatus: z.enum(['PENDING', 'CONVERTING', 'CONVERTED', 'FAILED']).optional(),
-      verificationStatus: z.string().optional(),
-      exposureLevel: z.enum(['INTERNAL', 'EXTERNAL', 'NEEDS_APPROVAL', 'STRICTLY_FORBIDDEN']).optional(),
-      fileSize: z.number().optional(),
-    }))
+  update: publicProcedure
+    .input(z.object({ id: z.string(), data: z.record(z.unknown()) }))
     .mutation(async ({ ctx, input }) => {
-      const { id, ...updateData } = input;
-
-      // 检查用户是否有权限更新此素材
-      const rawMaterial = await ctx.prisma.raw.findUnique({
-        where: { id },
-      });
-
-      if (!rawMaterial) {
-        throw new Error('Raw material not found');
-      }
-
-      // 确保用户属于该项目
-      const project = await ctx.prisma.project.findUnique({
-        where: { id: rawMaterial.projectId },
-      });
-
-      if (!project) {
-        throw new Error('Project not found');
-      }
-
-      return ctx.prisma.raw.update({
-        where: { id },
-        data: updateData,
-      });
-    }),
-
-  // 删除Raw素材
-  delete: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-    }))
-    .mutation(async ({ ctx, input }) => {
-      // 检查用户是否有权限删除此素材
-      const rawMaterial = await ctx.prisma.raw.findUnique({
+      const raw = await ctx.prisma.raw.update({
         where: { id: input.id },
+        data: input.data as any,
       });
-
-      if (!rawMaterial) {
-        throw new Error('Raw material not found');
-      }
-
-      // 确保用户属于该项目
-      const project = await ctx.prisma.project.findUnique({
-        where: { id: rawMaterial.projectId },
-      });
-
-      if (!project) {
-        throw new Error('Project not found');
-      }
-
-      return ctx.prisma.raw.delete({
-        where: { id: input.id },
-      });
+      return raw;
     }),
 
-  // 获取统计数据
-  getStats: protectedProcedure
-    .input(z.object({
-      projectId: z.string(),
-    }))
-    .query(async ({ ctx, input }) => {
-      const { projectId } = input;
-
-      // 检查项目访问权限
-      const project = await ctx.prisma.project.findUnique({
-        where: { id: projectId },
-      });
-
-      if (!project) {
-        throw new Error('Project not found');
-      }
-
-      const stats = await ctx.prisma.raw.groupBy({
-        where: { projectId },
-        by: ['materialType'],
-        _count: {
-          _all: true,
-        },
-      });
-
-      const total = await ctx.prisma.raw.count({
-        where: { projectId },
-      });
-
-      const statusCount = await ctx.prisma.raw.groupBy({
-        where: { projectId },
-        by: ['conversionStatus'],
-        _count: {
-          _all: true,
-        },
-      });
-
-      return {
-        total,
-        byType: stats,
-        byStatus: statusCount,
-      };
-    }),
-
-  // 批量操作
-  batchDelete: protectedProcedure
-    .input(z.object({
-      ids: z.array(z.string()),
-    }))
+  delete: publicProcedure
+    .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      // 检查每个素材的权限
-      const rawMaterials = await ctx.prisma.raw.findMany({
-        where: {
-          id: {
-            in: input.ids,
-          },
-        },
-      });
+      await ctx.prisma.raw.delete({ where: { id: input.id } });
+      return { success: true };
+    }),
 
-      if (rawMaterials.length !== input.ids.length) {
-        throw new Error('Some raw materials not found');
+  startConversion: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const raw = await ctx.prisma.raw.findUniqueOrThrow({ where: { id: input.id } });
+      if (!raw.originalFileUrl) {
+        throw new Error("该素材没有关联文件，无法转换");
       }
 
-      // 确保所有素材都在用户的项目中
-      const uniqueProjectIds = Array.from(new Set(rawMaterials.map(rm => rm.projectId)));
-      for (const projectId of uniqueProjectIds) {
-        const project = await ctx.prisma.project.findUnique({
-          where: { id: projectId },
-        });
-
-        if (!project) {
-          throw new Error(`Project ${projectId} not found`);
-        }
-      }
-
-      return ctx.prisma.raw.deleteMany({
-        where: {
-          id: {
-            in: input.ids,
-          },
-        },
+      // 异步执行转换
+      import("@/server/services/conversion").then(({ runConversion }) => {
+        runConversion(input.id).catch((err) => console.error("转换异步任务失败:", err));
       });
+
+      return { success: true, message: "转换任务已提交" };
     }),
 });

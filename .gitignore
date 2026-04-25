@@ -35,3 +35,4 @@ uploads/*.pdf
 uploads/*.docx
 uploads/*.mp3
 uploads/*.mp4
+public/uploads/
