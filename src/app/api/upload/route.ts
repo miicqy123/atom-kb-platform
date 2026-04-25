@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "文件不能超过 10MB" }, { status: 400 });
     }
 
-    const blob = await put(file.name, file, { access: "private" });
+    const blob = await put(file.name, file, { access: "private", addRandomSuffix: true });
 
     const ext = file.name.split(".").pop()?.toLowerCase() || "";
     const formatMap: Record<string, string> = {
