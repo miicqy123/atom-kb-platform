@@ -31,6 +31,7 @@ import { orchestrationRouter } from './orchestration';
 import { documentParseConfigRouter } from './document-parse-config';
 import { moduleRouter } from './module';
 import { packRouter } from './pack';
+import { cloneRouter } from './clone';
 
 export const appRouter = router({
   raw: rawRouter,
@@ -66,6 +67,7 @@ export const appRouter = router({
   documentParseConfig: documentParseConfigRouter,
   module: moduleRouter,
   pack: packRouter,
+  clone: cloneRouter,
 });
 
 export type AppRouter = typeof appRouter;
