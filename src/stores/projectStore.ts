@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 
 interface Project {
   id: string;
@@ -13,20 +13,20 @@ interface ProjectStore {
   setCurrentProject: (project: Project | null) => void;
   setProjects: (projects: Project[]) => void;
   clear: () => void;
-  _hasHydrated: boolean;
-  setHasHydrated: (state: boolean) => void;
 }
+
+const initialState = {
+  currentProject: null,
+  projects: [],
+};
 
 export const useProjectStore = create<ProjectStore>()(
   persist(
     (set) => ({
-      currentProject: null,
-      projects: [],
-      _hasHydrated: false,
+      ...initialState,
       setCurrentProject: (project) => set({ currentProject: project }),
       setProjects: (projects) => set({ projects }),
-      clear: () => set({ currentProject: null, projects: [] }),
-      setHasHydrated: (state) => set({ _hasHydrated: state }),
+      clear: () => set(initialState),
     }),
     {
       name: 'atom-kb-project',
@@ -34,9 +34,23 @@ export const useProjectStore = create<ProjectStore>()(
         currentProject: state.currentProject,
         projects: state.projects,
       }),
-      onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true);
-      },
+      // 添加状态迁移函数以防万一
+      migrate: (persistedState) => {
+        if (!persistedState) return initialState;
+
+        // 如果状态结构完全不符合预期，返回初始状态
+        if (typeof persistedState !== 'object') {
+          return initialState;
+        }
+
+        return {
+          ...initialState,
+          ...persistedState,
+          // 确保字段类型正确
+          currentProject: (persistedState as any).currentProject || null,
+          projects: Array.isArray((persistedState as any).projects) ? (persistedState as any).projects : []
+        };
+      }
     }
   )
 );
