@@ -6,10 +6,15 @@ import { useProjectStore } from "@/stores/projectStore";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Badge } from "@/components/ui/Badge";
 import { LayerBadge } from "@/components/ui/LayerBadge";
 import { GranularityBadge } from "@/components/ui/GranularityBadge";
 import { SlotTag } from "@/components/ui/SlotTag";
 import { Pagination } from "@/components/ui/Pagination";
+import {
+  CATEGORY_OPTIONS, getSubcategoryOptions,
+  CATEGORY_LABEL_MAP, SUBCATEGORY_LABEL_MAP,
+} from "@/lib/categoryMaps";
 import { Plus, Search, LayoutGrid, Table2, Kanban, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import AtomDialog from "@/components/knowledge/AtomDialog";
@@ -22,6 +27,8 @@ export default function AtomsPage() {
   const [search, setSearch] = useState("");
   const [layerFilter, setLayerFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [subcategoryFilter, setSubcategoryFilter] = useState("");
   const [view, setView] = useState<"table" | "card" | "kanban">("table");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingAtom, setEditingAtom] = useState<any>(null);
@@ -37,6 +44,15 @@ export default function AtomsPage() {
     search: search || undefined,
     layer: (layerFilter || undefined) as "A" | "B" | "C" | "D" | undefined,
     status: (statusFilter || undefined) as "DRAFT" | "TESTING" | "ACTIVE" | "ARCHIVED" | undefined,
+    category: (categoryFilter || undefined) as "CAT_WHO" | "CAT_WHAT" | "CAT_HOW" | "CAT_STYLE" | "CAT_FENCE" | "CAT_PROOF" | undefined,
+    subcategory: (subcategoryFilter || undefined) as
+      | "WHO_BRAND" | "WHO_ROLE" | "WHO_AUDIENCE" | "WHO_TERM"
+      | "WHAT_PRODUCT" | "WHAT_USP" | "WHAT_PRICE" | "WHAT_CERT"
+      | "HOW_SOP" | "HOW_METHOD" | "HOW_TACTIC" | "HOW_BEST"
+      | "STYLE_HOOK" | "STYLE_WORD" | "STYLE_TONE" | "STYLE_RHYTHM"
+      | "FENCE_BAN" | "FENCE_ALLOW" | "FENCE_LAW" | "FENCE_BLUR"
+      | "PROOF_CASE" | "PROOF_DATA" | "PROOF_FAIL" | "PROOF_COMPARE"
+      | undefined,
     limit,
     offset
   }, {
@@ -113,6 +129,23 @@ export default function AtomsPage() {
     { key: "granularity", label: "粒度", render: (r) => <GranularityBadge g={r.granularity} /> },
     { key: "dimensions", label: "维度", render: (r) => <span className="text-xs text-gray-500">{r.dimensions?.slice(0, 5).join(", ")}{r.dimensions?.length > 5 ? "…" : ""}</span> },
     { key: "slotMappings", label: "槽位", render: (r) => <div className="flex flex-wrap gap-1">{r.slotMappings?.slice(0, 3).map((s: string) => <SlotTag key={s} slot={s} />)}</div> },
+    { key: "category", label: "类别", render: (r) => {
+      const label = CATEGORY_LABEL_MAP[r.category];
+      if (!label) return <span className="text-xs text-gray-400">-</span>;
+      const colorMap: Record<string, string> = {
+        CAT_WHO: "bg-blue-100 text-blue-700 border-blue-200",
+        CAT_WHAT: "bg-green-100 text-green-700 border-green-200",
+        CAT_HOW: "bg-orange-100 text-orange-700 border-orange-200",
+        CAT_STYLE: "bg-purple-100 text-purple-700 border-purple-200",
+        CAT_FENCE: "bg-red-100 text-red-700 border-red-200",
+        CAT_PROOF: "bg-yellow-100 text-yellow-700 border-yellow-200",
+      };
+      return <Badge variant="outline" className={colorMap[r.category] || ""}>{label}</Badge>;
+    }},
+    { key: "subcategory", label: "子类别", render: (r) => {
+      const label = SUBCATEGORY_LABEL_MAP[r.subcategory];
+      return <span className="text-xs text-gray-600">{label || "-"}</span>;
+    }},
     { key: "status", label: "状态", render: (r) => <StatusBadge status={r.status} /> },
     { key: "createdAt", label: "创建时间", render: (r) => <span className="text-xs">{new Date(r.createdAt).toLocaleDateString()}</span> },
     { key: "actions", label: "操作", render: (r) => (
@@ -186,6 +219,25 @@ export default function AtomsPage() {
         >
           <option value="">全部状态</option>
           {["DRAFT","TESTING","ACTIVE","ARCHIVED"].map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select
+          value={categoryFilter}
+          onChange={e => {
+            setCategoryFilter(e.target.value);
+            setSubcategoryFilter("");
+          }}
+          className="h-9 rounded-lg border px-3 text-sm"
+        >
+          <option value="">全部类别</option>
+          {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select
+          value={subcategoryFilter}
+          onChange={e => setSubcategoryFilter(e.target.value)}
+          className="h-9 rounded-lg border px-3 text-sm"
+        >
+          <option value="">全部子类别</option>
+          {getSubcategoryOptions(categoryFilter || undefined).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <div className="flex rounded-lg border">
           {(["table", "card", "kanban"] as const).map(v => (
