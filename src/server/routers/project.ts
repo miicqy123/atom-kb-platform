@@ -2,8 +2,8 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../trpc";
 
 export const projectRouter = router({
-  // 获取项目列表
-  list: protectedProcedure
+  // 获取项目列表 - 按工作空间（原有功能）
+  listByWorkspace: protectedProcedure
     .input(z.object({
       workspaceId: z.string(),
       limit: z.number().optional().default(10),
@@ -59,6 +59,28 @@ export const projectRouter = router({
         totalCount,
         hasMore: offset + limit < totalCount
       };
+    }),
+
+  // 获取项目列表 - 按租户（新增功能）
+  list: protectedProcedure
+    .query(async ({ ctx }) => {
+      const user = ctx.session.user as any;
+
+      // 查询用户所属租户下所有工作空间的项目
+      const projects = await ctx.prisma.project.findMany({
+        where: {
+          workspace: {
+            tenantId: user.tenantId
+          },
+          status: "ACTIVE",
+        },
+        orderBy: { updatedAt: "desc" },
+        include: {
+          workspace: true,
+        }
+      });
+
+      return projects;
     }),
 
   // 根据ID获取单个项目

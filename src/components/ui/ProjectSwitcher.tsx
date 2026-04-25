@@ -14,21 +14,14 @@ export function ProjectSwitcher({ onProjectChange }: ProjectSwitcherProps) {
   const { data: session } = useSession();
   const { currentProjectId, setCurrentProjectId, addToRecent } = useProjectStore();
 
-  const { data: workspaces } = trpc.workspace.list.useQuery(undefined, {
+  const { data: projects } = trpc.project.list.useQuery(undefined, {
     enabled: !!session?.user?.id,
   });
 
-  const workspaceId = workspaces?.items?.[0]?.id;
-
-  const { data: projects } = trpc.project.list.useQuery(
-    { workspaceId: workspaceId || '' },
-    { enabled: !!workspaceId }
-  );
-
   useEffect(() => {
     // Set default project if none is selected and projects are available
-    if (!currentProjectId && projects?.items?.length > 0) {
-      const firstProject = projects.items[0];
+    if (!currentProjectId && projects?.length > 0) {
+      const firstProject = projects[0];
       setCurrentProjectId(firstProject.id);
       addToRecent(firstProject.id);
     }
@@ -43,7 +36,7 @@ export function ProjectSwitcher({ onProjectChange }: ProjectSwitcherProps) {
     }
   };
 
-  if (!projects?.items?.length) {
+  if (!projects?.length) {
     return <div className="text-sm text-gray-500 px-3 py-2">无项目</div>;
   }
 
@@ -56,7 +49,7 @@ export function ProjectSwitcher({ onProjectChange }: ProjectSwitcherProps) {
         onChange={handleProjectChange}
         className="border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
       >
-        {projects.items.map(project => (
+        {projects.map(project => (
           <option key={project.id} value={project.id}>
             {project.name}
           </option>
