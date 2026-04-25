@@ -59,6 +59,7 @@ export default function RawMaterialsPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mdSearch, setMdSearch] = useState("");
+  const [mdCategoryFilter, setMdCategoryFilter] = useState("");
   const [editingItem, setEditingItem] = useState<any>(null);
   const [previewItem, setPreviewItem] = useState<any>(null);
   const [addingToKb, setAddingToKb] = useState(false);
@@ -111,7 +112,16 @@ export default function RawMaterialsPage() {
   const selectedItem = items.find((r: any) => r.id === selectedId);
   const convertedItems = items
     .filter((r: any) => r.conversionStatus === "CONVERTED")
-    .filter((r: any) => !mdSearch || r.title.toLowerCase().includes(mdSearch.toLowerCase()) || r.markdownContent?.toLowerCase().includes(mdSearch.toLowerCase()));
+    .filter((r: any) => !mdSearch || r.title.toLowerCase().includes(mdSearch.toLowerCase()) || r.markdownContent?.toLowerCase().includes(mdSearch.toLowerCase()))
+    .filter((r: any) => !mdCategoryFilter || r.materialType === mdCategoryFilter);
+  const mdGroups = Object.entries(
+    convertedItems.reduce((acc: Record<string, any[]>, r: any) => {
+      const key = r.materialType || "OTHER";
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(r);
+      return acc;
+    }, {})
+  );
   const kanbanGroups = Object.entries(
     items.reduce((acc: Record<string, any[]>, r: any) => {
       const key = r.materialType || "OTHER";
@@ -603,50 +613,106 @@ export default function RawMaterialsPage() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-3">
-              {convertedItems.map((r: any) => (
-                <div
-                  key={r.id}
-                  onClick={() => setPreviewItem(r)}
-                  className="rounded-xl border border-gray-200 bg-white p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group"
+            <div className="flex items-center gap-1.5 flex-wrap mt-3">
+              <button
+                onClick={() => setMdCategoryFilter("")}
+                className={`px-2.5 py-1 rounded-full text-xs transition ${
+                  !mdCategoryFilter ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                全部
+              </button>
+              {Object.entries(
+                items
+                  .filter((r: any) => r.conversionStatus === "CONVERTED")
+                  .reduce((acc: Record<string, number>, r: any) => {
+                    const key = r.materialType || "OTHER";
+                    acc[key] = (acc[key] || 0) + 1;
+                    return acc;
+                  }, {})
+              ).map(([type, count]) => (
+                <button
+                  key={type}
+                  onClick={() => setMdCategoryFilter(type === mdCategoryFilter ? "" : type)}
+                  className={`px-2.5 py-1 rounded-full text-xs transition ${
+                    mdCategoryFilter === type ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
                 >
-                  <div className="flex items-center gap-2 mb-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedMdIds.has(r.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        const next = new Set(selectedMdIds);
-                        if (e.target.checked) next.add(r.id);
-                        else next.delete(r.id);
-                        setSelectedMdIds(next);
-                      }}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
-                    />
-                    <span className="text-xl shrink-0">{FORMAT_ICONS[r.format] ?? <FileText className="w-5 h-5" />}</span>
-                    <span className="font-medium text-sm truncate">{r.title}</span>
-                  </div>
-                  {r.markdownContent && (
-                    <pre className="text-xs text-gray-500 whitespace-pre-wrap line-clamp-3 font-mono mb-2 leading-relaxed">
-                      {getMarkdownPreview(r.markdownContent)}
-                    </pre>
-                  )}
-                  <div className="flex items-center justify-between mt-3">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">
-                        {MATERIAL_TYPE_LABELS[r.materialType] || r.materialType}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {r.markdownContent ? r.markdownContent.length + " 字" : ""}
-                      </span>
-                    </div>
-                    <span className="flex items-center gap-1 text-xs text-blue-600 group-hover:text-blue-700 font-medium">
-                      进入工作台 <ExternalLink className="w-3 h-3" />
-                    </span>
-                  </div>
-                </div>
+                  {MATERIAL_TYPE_LABELS[type] || type} ({count})
+                </button>
               ))}
             </div>
+            {!mdCategoryFilter && mdGroups.length > 1 ? (
+              <div className="space-y-6 mt-3">
+                {mdGroups.map(([type, groupItems]) => (
+                  <div key={type}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <h4 className="text-sm font-semibold text-gray-700">{MATERIAL_TYPE_LABELS[type] || type}</h4>
+                      <span className="text-xs text-gray-400">({groupItems.length})</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {groupItems.map((r: any) => (
+                        <div key={r.id} onClick={() => setPreviewItem(r)} className="rounded-xl border border-gray-200 bg-white p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group">
+                          <div className="flex items-center gap-2 mb-2">
+                            <input type="checkbox" checked={selectedMdIds.has(r.id)} onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => { const next = new Set(selectedMdIds); if (e.target.checked) next.add(r.id); else next.delete(r.id); setSelectedMdIds(next); }}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0" />
+                            <span className="text-xl shrink-0">{FORMAT_ICONS[r.format] ?? <FileText className="w-5 h-5" />}</span>
+                            <span className="font-medium text-sm truncate">{r.title}</span>
+                          </div>
+                          {r.markdownContent && (
+                            <pre className="text-xs text-gray-500 whitespace-pre-wrap line-clamp-3 font-mono mb-2 leading-relaxed">
+                              {getMarkdownPreview(r.markdownContent)}
+                            </pre>
+                          )}
+                          <div className="flex items-center justify-between mt-3">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">
+                                {MATERIAL_TYPE_LABELS[r.materialType] || r.materialType}
+                              </span>
+                              <span className="text-xs text-gray-400">{r.markdownContent ? r.markdownContent.length + " 字" : ""}</span>
+                            </div>
+                            <span className="flex items-center gap-1 text-xs text-blue-600 group-hover:text-blue-700 font-medium">
+                              进入工作台 <ExternalLink className="w-3 h-3" />
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-3">
+                {convertedItems.map((r: any) => (
+                  <div key={r.id} onClick={() => setPreviewItem(r)} className="rounded-xl border border-gray-200 bg-white p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group">
+                    <div className="flex items-center gap-2 mb-2">
+                      <input type="checkbox" checked={selectedMdIds.has(r.id)} onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => { const next = new Set(selectedMdIds); if (e.target.checked) next.add(r.id); else next.delete(r.id); setSelectedMdIds(next); }}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0" />
+                      <span className="text-xl shrink-0">{FORMAT_ICONS[r.format] ?? <FileText className="w-5 h-5" />}</span>
+                      <span className="font-medium text-sm truncate">{r.title}</span>
+                    </div>
+                    {r.markdownContent && (
+                      <pre className="text-xs text-gray-500 whitespace-pre-wrap line-clamp-3 font-mono mb-2 leading-relaxed">
+                        {getMarkdownPreview(r.markdownContent)}
+                      </pre>
+                    )}
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">
+                          {MATERIAL_TYPE_LABELS[r.materialType] || r.materialType}
+                        </span>
+                        <span className="text-xs text-gray-400">{r.markdownContent ? r.markdownContent.length + " 字" : ""}</span>
+                      </div>
+                      <span className="flex items-center gap-1 text-xs text-blue-600 group-hover:text-blue-700 font-medium">
+                        进入工作台 <ExternalLink className="w-3 h-3" />
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
