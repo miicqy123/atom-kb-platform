@@ -88,6 +88,10 @@ export default function RawMaterialsPage() {
     },
   });
 
+  const updateRaw = trpc.raw.update.useMutation({
+    onSuccess: () => utils.raw.list.invalidate(),
+  });
+
   const items: any[] = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
   const totalPages = data?.totalPages ?? 1;
   const selectedItem = items.find((r: any) => r.id === selectedId);
@@ -252,6 +256,24 @@ export default function RawMaterialsPage() {
                     <div className="font-medium">{selectedItem.format}</div>
                     <div className="text-gray-500">大小</div>
                     <div className="font-medium">{formatFileSize(selectedItem.fileSize)}</div>
+                    <div className="text-gray-500">上传时间</div>
+                    <div className="text-gray-900">{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleDateString("zh-CN") : "-"}</div>
+                    <div className="text-gray-500">可对外等级</div>
+                    <dd className="text-gray-900">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        selectedItem.exposureLevel === "INTERNAL" ? "bg-gray-100 text-gray-600" :
+                        selectedItem.exposureLevel === "EXTERNAL" ? "bg-green-100 text-green-700" :
+                        selectedItem.exposureLevel === "NEEDS_APPROVAL" ? "bg-yellow-100 text-yellow-700" :
+                        "bg-red-100 text-red-700"
+                      }`}>
+                        {{
+                          INTERNAL: "仅内部",
+                          EXTERNAL: "可对外",
+                          NEEDS_APPROVAL: "需审批",
+                          STRICTLY_FORBIDDEN: "严禁外发"
+                        }[selectedItem.exposureLevel] || selectedItem.exposureLevel}
+                      </span>
+                    </dd>
                   </div>
                 </div>
 
@@ -280,11 +302,34 @@ export default function RawMaterialsPage() {
                       <span className="ml-auto text-xs text-blue-500 animate-pulse">转换中...</span>
                     )}
                   </div>
+                  <div className="flex gap-2 mt-2">
+                    {selectedItem.originalFileUrl && (
+                      <a
+                        href={selectedItem.originalFileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> 原件预览
+                      </a>
+                    )}
+                    {selectedItem.conversionStatus === "CONVERTED" && selectedItem.markdownContent && (
+                      <button
+                        onClick={() => {
+                          const el = document.getElementById("md-preview-section");
+                          el?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                      >
+                        <FileText className="w-3.5 h-3.5" /> Markdown预览
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Markdown 预览 */}
                 {selectedItem.conversionStatus === "CONVERTED" && selectedItem.markdownContent && (
-                  <div className="space-y-2">
+                  <div id="md-preview-section" className="space-y-2">
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Markdown 预览</h3>
                     <div className="rounded-lg border bg-gray-50 p-3 max-h-48 overflow-y-auto">
                       <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
@@ -318,6 +363,18 @@ export default function RawMaterialsPage() {
                       进入知识加工工作台
                     </button>
                   )}
+                  <button
+                    onClick={() => {
+                      const newTitle = prompt("修改标题", selectedItem.title);
+                      if (newTitle && newTitle !== selectedItem.title) {
+                        updateRaw.mutate({ id: selectedItem.id, data: { title: newTitle } });
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                  >
+                    <FileText className="w-4 h-4" />
+                    编辑元数据
+                  </button>
                   <button
                     onClick={() => {
                       if (confirm("确定删除「" + selectedItem.title + "」？")) {
