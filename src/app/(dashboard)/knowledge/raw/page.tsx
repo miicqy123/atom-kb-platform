@@ -60,6 +60,8 @@ export default function RawMaterialsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mdSearch, setMdSearch] = useState("");
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [previewItem, setPreviewItem] = useState<any>(null);
+  const [addingToKb, setAddingToKb] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -93,6 +95,14 @@ export default function RawMaterialsPage() {
 
   const updateRaw = trpc.raw.update.useMutation({
     onSuccess: () => utils.raw.list.invalidate(),
+  });
+
+  const addToKb = trpc.raw.addToKnowledgeBase.useMutation({
+    onSuccess: () => {
+      alert("已添加到企业知识库！");
+      utils.raw.list.invalidate();
+    },
+    onError: () => alert("添加失败，请重试"),
   });
 
   const items: any[] = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
@@ -573,7 +583,7 @@ export default function RawMaterialsPage() {
               {convertedItems.map((r: any) => (
                 <div
                   key={r.id}
-                  onClick={() => router.push("/knowledge/workbench?rawId=" + r.id)}
+                  onClick={() => setPreviewItem(r)}
                   className="rounded-xl border border-gray-200 bg-white p-4 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group"
                 >
                   <div className="flex items-center gap-2 mb-2">
@@ -618,6 +628,57 @@ export default function RawMaterialsPage() {
           onClose={() => setEditingItem(null)}
           onSuccess={() => utils.raw.list.invalidate()}
         />
+      )}
+      {previewItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setPreviewItem(null)}>
+          <div className="w-full max-w-4xl max-h-[85vh] rounded-2xl bg-white shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* 弹窗标题栏 */}
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">{FORMAT_ICONS[previewItem.format] ?? <FileText className="w-5 h-5" />}</span>
+                <div>
+                  <h3 className="font-semibold text-base">{previewItem.title}</h3>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">{MATERIAL_TYPE_LABELS[previewItem.materialType] || previewItem.materialType}</span>
+                    <span>{EXP_SOURCE_LABELS[previewItem.experienceSource] || previewItem.experienceSource}</span>
+                    <span>{previewItem.markdownContent ? previewItem.markdownContent.length + " 字" : ""}</span>
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setPreviewItem(null)} className="p-1 hover:bg-gray-100 rounded"><X className="w-5 h-5" /></button>
+            </div>
+
+            {/* Markdown 内容区 */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <pre className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed font-sans">
+                {previewItem.markdownContent || "暂无 Markdown 内容"}
+              </pre>
+            </div>
+
+            {/* 底部操作栏 */}
+            <div className="flex items-center justify-between px-6 py-4 border-t shrink-0 bg-gray-50 rounded-b-2xl">
+              <button
+                onClick={() => addToKb.mutate({ rawId: previewItem.id, projectId: currentProject?.id ?? "" })}
+                disabled={addToKb.isLoading}
+                className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2.5 text-sm text-white hover:bg-green-700 shadow-sm disabled:opacity-50"
+              >
+                <Globe className="w-4 h-4" />
+                {addToKb.isLoading ? "添加中..." : "添加到企业知识库"}
+              </button>
+              <button
+                onClick={() => {
+                  const id = previewItem.id;
+                  setPreviewItem(null);
+                  router.push("/knowledge/workbench?rawId=" + id);
+                }}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm text-white hover:bg-blue-700 shadow-sm"
+              >
+                <Play className="w-4 h-4" />
+                进入工作台加工
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

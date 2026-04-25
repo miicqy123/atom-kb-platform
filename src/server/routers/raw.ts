@@ -79,6 +79,27 @@ export const rawRouter = router({
       return { success: true };
     }),
 
+  addToKnowledgeBase: publicProcedure
+    .input(z.object({
+      rawId: z.string(),
+      projectId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const raw = await ctx.prisma.raw.findUniqueOrThrow({ where: { id: input.rawId } });
+      const atom = await ctx.prisma.atom.create({
+        data: {
+          title: raw.title,
+          content: raw.markdownContent || "",
+          projectId: input.projectId,
+          rawId: raw.id,
+          layer: "A" as const,
+          experienceSource: raw.experienceSource,
+          status: "DRAFT" as const,
+        },
+      });
+      return atom;
+    }),
+
   startConversion: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
