@@ -208,6 +208,8 @@ export default function RawMaterialsPage() {
                         <span className="text-xs text-gray-400">{EXP_SOURCE_LABELS[r.experienceSource] || r.experienceSource}</span>
                         <span className="text-xs text-gray-300">·</span>
                         <span className="text-xs text-gray-400">{formatFileSize(r.fileSize)}</span>
+                        <span className="text-xs text-gray-300">·</span>
+                        <span className="text-xs text-gray-400">{r.createdAt ? new Date(r.createdAt).toLocaleDateString("zh-CN") : ""}</span>
                       </div>
                     </div>
                     <div className="shrink-0">
