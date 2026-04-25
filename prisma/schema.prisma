@@ -68,6 +68,8 @@ model Project {
   raws         Raw[]
   workflows    Workflow[]
   workflowRuns WorkflowRun[]
+  tasks        Task[]
+  prompts      Prompt[]
 }
 
 model User {
@@ -666,6 +668,49 @@ model ApiKey {
   project    Project  @relation(fields: [projectId], references: [id])
 }
 
+model Task {
+  id              String       @id @default(cuid())
+  projectId       String
+  type            TaskType
+  description     String       // 一句话描述
+  platform        Platform     @default(GENERAL)
+  audience        Audience     @default(GENERAL)
+  status          String       @default("pending")  // pending → processing → done → failed
+  // 关联的原始资料
+  rawIds          String[]
+  // 生成的提示词
+  promptId        String?      @unique
+  prompt          Prompt?      @relation(fields: [promptId], references: [id])
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([projectId, status])
+}
+
+model Prompt {
+  id                String        @id @default(cuid())
+  projectId         String
+  fullText          String        // 完整提示词文本
+  slots             Json          // { S0: "...", S1: "...", ... S10: "..." }
+  thinkingModel     String?       // COT / TOULMIN / MULTI_PERSPECTIVE 等
+  score             Float?        // 最新评分
+  optimizationRound Int           @default(0)
+  maxRounds         Int           @default(3)
+  status            PromptStatus  @default(DRAFT)
+  linkedAtomIds     String[]      // 引用的原子块 ID 列表
+  linkedPackIds     String[]      // 引用的场景包 ID 列表
+  scoreDimensions   Json?         // 7 维度评分明细
+  optimizerUsed     String?       // LYRA / JOHARI / LQ22PRO 等
+  version           Int           @default(1)
+  task              Task?
+  project           Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([projectId, status])
+}
+
 enum UserRole {
   SUPER_ADMIN
   TENANT_ADMIN
@@ -840,4 +885,42 @@ enum ContentSubCategory {
   PROOF_DATA     // 数据报告
   PROOF_FAIL     // 反面教训
   PROOF_COMPARE  // 对比分析
+}
+
+// 任务类型
+enum TaskType {
+  SHORT_VIDEO    // 短视频文案
+  MOMENTS        // 朋友圈文案
+  SALES_TALK     // 销售话术
+  LIVE_TALK      // 直播话术
+  BRAND_STORY    // 品牌故事
+  IMAGE_PROMPT   // 做图提示词
+  ANALYSIS       // 选题分析
+  GENERAL        // 通用
+  CUSTOM         // 自定义
+}
+
+// 目标平台
+enum Platform {
+  DOUYIN         // 抖音
+  XIAOHONGSHU    // 小红书
+  SHIPINHAO      // 视频号
+  WECHAT_MOMENTS // 朋友圈
+  GENERAL        // 通用
+}
+
+// 目标受众
+enum Audience {
+  BOSS           // 企业老板/决策者
+  EXECUTOR       // 执行者/运营人员
+  CONSUMER       // C端消费者
+  GENERAL        // 通用
+}
+
+// 提示词状态
+enum PromptStatus {
+  DRAFT          // 草稿
+  OPTIMIZING     // 优化中
+  READY          // 就绪
+  PUBLISHED      // 已发布
 }
