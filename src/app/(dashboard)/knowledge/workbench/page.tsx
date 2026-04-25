@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useToast } from "@/hooks/use-toast";
 import { trpc } from "@/lib/trpc";
 import { useProjectStore } from "@/stores/projectStore";
+import { CATEGORY_LABEL_MAP, SUBCATEGORY_LABEL_MAP } from "@/lib/categoryMaps";
 import { Play, CheckCircle, Circle, Loader2, ChevronDown, ChevronRight, Scissors, Merge, Tag, X, ChevronLeft } from "lucide-react";
 
 /* ── 30 维度 ── */
@@ -57,6 +58,8 @@ type Chunk = {
   layer: string;
   slotMappings: string[];
   expSource: string;
+  category?: string | null;
+  subcategory?: string | null;
 };
 
 /* ── 6 站流程 ── */
@@ -298,6 +301,23 @@ function WorkbenchContent() {
                         <button className="px-1.5 py-0.5 rounded border hover:bg-gray-100">拆分↔</button>
                         <button className="px-1.5 py-0.5 rounded border hover:bg-gray-100">调整✂️</button>
                       </div>
+                    </div>
+                    {/* 分类标签 */}
+                    <div className="flex items-center gap-1.5 mt-2">
+                      {chunk.category ? (
+                        <>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700">
+                            {CATEGORY_LABEL_MAP[chunk.category] || chunk.category}
+                          </span>
+                          {chunk.subcategory && (
+                            <span className="text-[10px] text-gray-400">
+                              → {SUBCATEGORY_LABEL_MAP[chunk.subcategory] || chunk.subcategory}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-gray-300">未分类</span>
+                      )}
                     </div>
                   </div>
                 ))}
