@@ -179,41 +179,33 @@ export const blueprintRouter = router({
     .input(z.object({
       blueprintId: z.string(),
       slotKey: z.string(),
-      topN: z.number().default(10)
+      topN: z.number().default(10),
+      categories: z.array(z.string()).optional(),
+      subcategories: z.array(z.string()).optional(),
     }))
     .query(async ({ ctx, input }) => {
-      // 检查用户是否有权限访问此蓝图 - TODO: 恢复 Auth 后启用权限检查
-      const bp = await ctx.prisma.blueprint.findUnique({
+      const bp = await ctx.prisma.blueprint.findUniqueOrThrow({
         where: { id: input.blueprintId },
-        include: { project: true }
+        include: { project: true },
       });
 
-      if (!bp) {
-        throw new Error('Blueprint not found');
+      const where: any = {
+        projectId: bp.projectId,
+        status: 'ACTIVE',
+        slotMappings: { has: input.slotKey },
+      };
+
+      if (input.categories?.length) {
+        where.category = { in: input.categories };
       }
-
-      if (ctx.session?.user?.id) {
-        const project = bp.project;
-        const userMembership = await ctx.prisma.workspaceUser.findFirst({
-          where: {
-            workspaceId: project.workspaceId,
-            userId: ctx.session.user.id,
-          },
-        });
-
-        if (!userMembership && project.ownerId !== ctx.session.user.id) {
-          throw new Error('Access denied');
-        }
+      if (input.subcategories?.length) {
+        where.subcategory = { in: input.subcategories };
       }
 
       return ctx.prisma.atom.findMany({
-        where: {
-          projectId: bp.projectId,
-          status: "ACTIVE",
-          slotMappings: { has: input.slotKey }
-        },
+        where,
         take: input.topN,
-        orderBy: { updatedAt: "desc" },
+        orderBy: { updatedAt: 'desc' },
         include: { _count: { select: { blueprints: true } } },
       });
     }),
