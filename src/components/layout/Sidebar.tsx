@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { BookOpen, PenTool, Settings2, Shield, Building2, Star, Clock } from "lucide-react";
+import { BookOpen, PenTool, Settings2, Shield, Building2, Star, Clock, Zap } from "lucide-react";
 import { useProjectStore } from "@/stores/projectStore";
 
 const NAV_SECTIONS = [
@@ -55,6 +55,12 @@ const NAV_SECTIONS = [
       { label: "用户与角色", href: "/admin/users" },
       { label: "资产生命周期", href: "/admin/asset-lifecycle" },
       { label: "系统配置", href: "/admin/system-config" },
+    ],
+  },
+  {
+    label: "快速复刻", icon: Zap, color: "text-amber-500", basePath: "/clone",
+    items: [
+      { label: "快速复刻", href: "/clone" },
     ],
   },
 ];
