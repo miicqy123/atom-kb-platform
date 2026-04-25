@@ -30,6 +30,16 @@ export const pipelineRouter = router({
         const atoms = await Promise.all(
           chunks.map(async (chunk) => {
             const tags = await autoTag(chunk);
+
+            // ━━━ 新增：去重校验 ━━━
+            const { checkDuplicate } = await import('@/services/deduplication');
+            const dedup = await checkDuplicate(input.projectId, chunk);
+            if (dedup.isDuplicate) {
+              console.log(`跳过重复原子块，相似度 ${dedup.similarity}，已有 ${dedup.similarAtomId}`);
+              return null;
+            }
+            // ━━━ 去重结束 ━━━
+
             return prisma.atom.create({
               data: {
                 title: chunk.slice(0, 60).replace(/\n/g, ' ') + (chunk.length > 60 ? '…' : ''),
@@ -49,7 +59,7 @@ export const pipelineRouter = router({
               },
             });
           })
-        );
+        ).then(results => results.filter(Boolean));
 
         await prisma.raw.update({
           where: { id: input.rawId },
