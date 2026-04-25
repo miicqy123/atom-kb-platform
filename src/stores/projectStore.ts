@@ -25,6 +25,12 @@ export const useProjectStore = create<ProjectStore>()(
       setProjects: (projects) => set({ projects }),
       clear: () => set({ currentProject: null, projects: [] }),
     }),
-    { name: 'atom-kb-project' }
+    {
+      name: 'atom-kb-project',
+      partialize: (state) => ({
+        currentProject: state.currentProject,
+        projects: state.projects
+      })
+    }
   )
 );
