@@ -32,9 +32,11 @@ import { documentParseConfigRouter } from './document-parse-config';
 import { moduleRouter } from './module';
 import { packRouter } from './pack';
 import { cloneRouter } from './clone';
+import { promptRouter } from './prompt';
 import { taskRouter } from './task';
 
 export const appRouter = router({
+  prompt: promptRouter,
   raw: rawRouter,
   atom: atomRouter,
   category: categoryRouter,
