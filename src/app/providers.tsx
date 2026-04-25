@@ -7,13 +7,28 @@ import { loggerLink, httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } } }));
+  const [queryClient] = useState(() =>
+    new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 30_000,
+          refetchOnWindowFocus: false,
+          retry: 1,
+        },
+      },
+    })
+  );
   const [trpcClient] = useState(() =>
     trpc.createClient({
       links: [
-        loggerLink(),
+        loggerLink({
+          enabled: (opts) =>
+            process.env.NODE_ENV === "development" ||
+            (opts.direction === "down" && opts.result instanceof Error),
+        }),
         httpBatchLink({
           url: "/api/trpc",
+          transformer: superjson,
           headers() {
             return {
               "x-trpc-source": "nextjs-react",
