@@ -151,13 +151,28 @@ async function main() {
   // ════════════════════════════════════════════
   // P6.14 示例数据
   // ════════════════════════════════════════════
-  await prisma.qAPair.deleteMany({});
-  await prisma.atom.deleteMany({});
-  await prisma.raw.deleteMany({ where: { projectId: 'default-project', title: { startsWith: 'LQ-5.0' } } });
-  await prisma.raw.deleteMany({ where: { projectId: 'default-project', title: { startsWith: '万华灵荃三段论' } } });
-  await prisma.raw.deleteMany({ where: { projectId: 'default-project', title: { startsWith: '生成式内容策略师' } } });
-  await prisma.raw.deleteMany({ where: { projectId: 'default-project', title: { startsWith: '无醛客卧室' } } });
-  console.log('🗑️  已清理旧示例数据');
+  const DEMO_RAW_TITLES = [
+    '无醛客卧室系列 RAG数据集',
+    'LQ-5.0 一键榨干万字长文→秒变视频选题 Pro版',
+    '万华灵荃三段论口播文案润色专家 V1.3 Pro版',
+    '生成式内容策略师与视觉概念师 v2.0 Pro版',
+  ];
+  const demoRawRows = await prisma.raw.findMany({
+    where: {
+      projectId: 'default-project',
+      title: { in: DEMO_RAW_TITLES },
+    },
+    select: { id: true },
+  });
+  const demoRawIds = demoRawRows.map((raw) => raw.id);
+  if (demoRawIds.length > 0) {
+    await prisma.qAPair.deleteMany({ where: { rawId: { in: demoRawIds } } });
+    await prisma.atom.deleteMany({ where: { rawId: { in: demoRawIds } } });
+    await prisma.raw.deleteMany({ where: { id: { in: demoRawIds } } });
+    console.log(`🗑️  已清理旧 demo 数据：Raw ${demoRawIds.length} 条`);
+  } else {
+    console.log('🗑️  未发现旧 demo 数据，跳过清理');
+  }
 
   const raw1 = await prisma.raw.create({
     data: {
