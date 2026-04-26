@@ -205,7 +205,17 @@ export default function FilePreviewRenderer({ item, proxyUrl }: FilePreviewRende
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400 py-20">
         <File className="w-12 h-12 mb-3 text-gray-300" />
-        <p>暂无原件文件</p>
+        <p>该资料无原件附件（已转为 Markdown 加工）</p>
+      </div>
+    );
+  }
+
+  if (item.originalFileUrl.startsWith('/uploads/')) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-gray-400 py-20">
+        <File className="w-12 h-12 mb-3 text-gray-300" />
+        <p>原件存储在本地，线上环境不可用</p>
+        <span className="text-xs mt-2">{item.originalFileUrl}</span>
       </div>
     );
   }

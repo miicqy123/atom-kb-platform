@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import EnterpriseSurveyDialog, { surveyToMarkdown, type SurveyData } from "@/components/knowledge/EnterpriseSurveyDialog";
 import FilePreviewRenderer from "@/components/FilePreviewRenderer";
 import PositionSurveyTab from "@/components/knowledge/position-survey/PositionSurveyTab";
+import { WorkbenchDrawer } from '@/components/workbench/WorkbenchDrawer';
+import { WorkbenchDrawerContent } from '@/components/workbench/WorkbenchDrawerContent';
 import {
   Upload, Search, FileText, FileSpreadsheet, Headphones, Image, Globe,
   Trash2, Eye, RotateCcw, X, AlertCircle, ChevronLeft, ChevronRight,
@@ -81,6 +83,7 @@ export default function RawMaterialsPage() {
   const [addingToKb, setAddingToKb] = useState(false);
   const [selectedMdIds, setSelectedMdIds] = useState<Set<string>>(new Set());
   const [showSurvey, setShowSurvey] = useState(false);
+  const [drawerRawId, setDrawerRawId] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -446,10 +449,10 @@ export default function RawMaterialsPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500">已选 {selectedMdIds.size} 篇</span>
                   <button
-                    onClick={() => { const ids = Array.from(selectedMdIds).join(","); router.push("/knowledge/workbench?rawIds=" + ids); }}
+                    onClick={() => { const id = Array.from(selectedMdIds)[0]; if (id) { setDrawerRawId(id); } }}
                     className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
                   >
-                    <ExternalLink className="w-3 h-3" /> 多选进入工作台
+                    <ExternalLink className="w-3 h-3" /> 多选进入工作台（首个）
                   </button>
                   <button onClick={() => setSelectedMdIds(new Set())} className="text-xs text-gray-400 hover:text-gray-600">取消选择</button>
                 </div>
@@ -499,7 +502,7 @@ export default function RawMaterialsPage() {
                         <span className="text-xs text-gray-400">{r.markdownContent ? r.markdownContent.length + " 字" : ""}</span>
                       </div>
                       <button
-                        onClick={e => { e.stopPropagation(); router.push("/knowledge/workbench?rawId=" + r.id); }}
+                        onClick={e => { e.stopPropagation(); setDrawerRawId(r.id); }}
                         className="text-xs text-blue-600 hover:text-blue-700 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         进入工作台 →
@@ -604,13 +607,29 @@ export default function RawMaterialsPage() {
           item={previewItem}
           onClose={() => setPreviewItem(null)}
           onAddToKb={() => addToKb.mutate({ rawId: previewItem.id, projectId: currentProject?.id ?? "" })}
-          onGoWorkbench={() => { const id = previewItem.id; setPreviewItem(null); router.push("/knowledge/workbench?rawId=" + id); }}
+          onGoWorkbench={() => { const id = previewItem.id; setPreviewItem(null); setDrawerRawId(id); }}
           addingToKb={addToKb.isPending}
           onStartConversion={() => { startConversion.mutate({ id: previewItem.id }); setPreviewItem(null); }}
           onEdit={() => { setEditingItem(previewItem); setPreviewItem(null); }}
           onDelete={() => { deleteRaw.mutate({ id: previewItem.id }); setPreviewItem(null); }}
         />
       )}
+
+      {/* ── 工作台抽屉（替代原独立页面跳转） ── */}
+      <WorkbenchDrawer
+        isOpen={!!drawerRawId}
+        onClose={() => setDrawerRawId(null)}
+        title="知识加工工作台"
+      >
+        {drawerRawId && (
+          <WorkbenchDrawerContent
+            rawId={drawerRawId}
+            projectId={currentProject?.id ?? ''}
+            fileName=""
+            experienceSource={null}
+          />
+        )}
+      </WorkbenchDrawer>
     </div>
   );
 }
