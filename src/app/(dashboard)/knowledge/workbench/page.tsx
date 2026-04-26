@@ -253,15 +253,18 @@ function WorkbenchContent() {
           </div>
         </div>
         <div className="ml-auto flex gap-2">
-          <Button variant={track==="A" ? "default" : "outline"} size="sm" onClick={() => { setTrack("A"); setSelectedMode('ATOM_ONLY'); }}
+          <Button variant={track==="A" ? "default" : "outline"} size="sm"
+            onClick={() => { setTrack("A"); setSelectedMode('ATOM_ONLY'); setStation(1); }}
             className={`text-xs ${track==="A" ? "bg-blue-600 text-white" : ""}`}>
             Track A 原子化 ▶
           </Button>
-          <Button variant={track==="B" ? "default" : "outline"} size="sm" onClick={() => { setTrack("B"); setSelectedMode('QA_ONLY'); }}
+          <Button variant={track==="B" ? "default" : "outline"} size="sm"
+            onClick={() => { setTrack("B"); setSelectedMode('QA_ONLY'); setStation(1); }}
             className={`text-xs ${track==="B" ? "bg-purple-600 text-white" : ""}`}>
             Track B QA对 ▶
           </Button>
-          <Button size="sm" onClick={() => { setSelectedMode('DUAL'); }}
+          <Button size="sm"
+            onClick={() => { setSelectedMode('DUAL'); setStation(1); }}
             className="text-xs bg-brand text-white">
             双轨并行 ▶▶
           </Button>
@@ -350,6 +353,64 @@ function WorkbenchContent() {
 
         {/* ══════ 右侧：加工控制面板 ══════ */}
         <div className="flex-1 overflow-auto">
+          {/* 站1：文档解析 + 模式选择 */}
+          {station === 1 && (
+            <div className="p-6 space-y-6">
+              <div className="text-center space-y-3">
+                <div className="text-4xl">📄</div>
+                <div className="text-sm text-gray-600">文档已解析完成，请选择加工模式</div>
+              </div>
+
+              <ModeSelector
+                selected={selectedMode}
+                onSelect={(mode) => setSelectedMode(mode)}
+                disabled={processWithMode.isPending}
+              />
+
+              {selectedMode && !processResult && (
+                <button
+                  onClick={handleStartProcessing}
+                  disabled={processWithMode.isPending}
+                  className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm text-white font-medium hover:bg-blue-700 disabled:opacity-50 transition"
+                >
+                  {processWithMode.isPending ? '加工中，请稍候...' : `开始「${selectedMode === 'ATOM_ONLY' ? '原子化入库' : selectedMode === 'QA_ONLY' ? 'QA向量入库' : '全量加工'}」`}
+                </button>
+              )}
+
+              {(atomPipeStatus !== 'idle' || qaPipeStatus !== 'idle') && selectedMode && (
+                <ProcessingProgress
+                  mode={selectedMode}
+                  atomStatus={atomPipeStatus}
+                  qaStatus={qaPipeStatus}
+                  atomCount={processResult?.atomCount ?? 0}
+                  qaCount={processResult?.qaCount ?? 0}
+                  error={processError}
+                />
+              )}
+
+              {processResult && (
+                <div className="flex gap-3">
+                  {(selectedMode === 'ATOM_ONLY' || selectedMode === 'DUAL') && (
+                    <button
+                      onClick={() => setStation(2)}
+                      className="flex-1 rounded-xl bg-blue-600 px-4 py-2.5 text-sm text-white hover:opacity-90"
+                    >
+                      查看切块详情 → 站② ▶
+                    </button>
+                  )}
+                  {(selectedMode === 'QA_ONLY' || selectedMode === 'DUAL') && (
+                    <button
+                      onClick={() => { setTrack('B'); setStation(4); }}
+                      className="flex-1 rounded-xl bg-purple-600 px-4 py-2.5 text-sm text-white hover:opacity-90"
+                    >
+                      查看 QA 对 → 站④ ▶
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Track A · 站2 智能切块 */}
           {track === "A" && station === 2 && (
             <div className="p-6 space-y-4">
@@ -632,54 +693,6 @@ function WorkbenchContent() {
           {track === "A" && (station === 5 || station === 6) && (
             <div className="flex items-center justify-center h-full text-gray-400 text-sm">
               站{station} {STATIONS[station-1].name} — 实现中…
-            </div>
-          )}
-
-          {/* 站1：文档解析 + 模式选择 */}
-          {station === 1 && (
-            <div className="p-6 space-y-6">
-              <div className="text-center space-y-3">
-                <div className="text-4xl">📄</div>
-                <div className="text-sm text-gray-600">文档已解析完成，请选择加工模式</div>
-              </div>
-
-              <ModeSelector
-                selected={selectedMode}
-                onSelect={(mode) => setSelectedMode(mode)}
-                disabled={processWithMode.isPending}
-              />
-
-              {selectedMode && !processResult && (
-                <button
-                  onClick={handleStartProcessing}
-                  disabled={processWithMode.isPending}
-                  className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm text-white font-medium hover:bg-blue-700 disabled:opacity-50 transition"
-                >
-                  {processWithMode.isPending ? '加工中，请稍候...' : `开始「${selectedMode === 'ATOM_ONLY' ? '原子化入库' : selectedMode === 'QA_ONLY' ? 'QA向量入库' : '全量加工'}」`}
-                </button>
-              )}
-
-              {(atomPipeStatus !== 'idle' || qaPipeStatus !== 'idle') && selectedMode && (
-                <ProcessingProgress
-                  mode={selectedMode}
-                  atomStatus={atomPipeStatus}
-                  qaStatus={qaPipeStatus}
-                  atomCount={processResult?.atomCount ?? 0}
-                  qaCount={processResult?.qaCount ?? 0}
-                  error={processError}
-                />
-              )}
-
-              {processResult && (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setStation(2)}
-                    className="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm text-white hover:opacity-90"
-                  >
-                    查看切块详情 → 站② ▶
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </div>
