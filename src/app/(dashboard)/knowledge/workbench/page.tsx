@@ -252,23 +252,6 @@ function WorkbenchContent() {
             <span>经验源: {currentRawData?.experienceSource || "E1"}</span>
           </div>
         </div>
-        <div className="ml-auto flex gap-2">
-          <Button variant={track==="A" ? "default" : "outline"} size="sm"
-            onClick={() => { setTrack("A"); setSelectedMode('ATOM_ONLY'); setStation(1); }}
-            className={`text-xs ${track==="A" ? "bg-blue-600 text-white" : ""}`}>
-            Track A 原子化 ▶
-          </Button>
-          <Button variant={track==="B" ? "default" : "outline"} size="sm"
-            onClick={() => { setTrack("B"); setSelectedMode('QA_ONLY'); setStation(1); }}
-            className={`text-xs ${track==="B" ? "bg-purple-600 text-white" : ""}`}>
-            Track B QA对 ▶
-          </Button>
-          <Button size="sm"
-            onClick={() => { setSelectedMode('DUAL'); setStation(1); }}
-            className="text-xs bg-brand text-white">
-            双轨并行 ▶▶
-          </Button>
-        </div>
       </div>
 
       {/* 批量模式 Tab 切换 */}
@@ -291,22 +274,30 @@ function WorkbenchContent() {
         </div>
       )}
 
-      {/* 进度条 */}
+      {/* 进度条 - 根据模式动态过滤 */}
       <div className="px-6 py-2 border-b bg-gray-50/50">
         <div className="flex items-center gap-1">
-          {STATIONS.map((s, i) => (
-            <div key={s.id} className="flex items-center">
-              <button onClick={() => setStation(s.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition ${
-                  station === s.id ? "bg-white shadow-sm border font-medium text-blue-700" :
-                  s.id < station ? "text-green-600" : "text-gray-400"
-                }`}>
-                {stationIcon(s.id)}
-                <span>站{s.id} {s.name}</span>
-              </button>
-              {i < STATIONS.length - 1 && <span className="text-gray-300 mx-1">→</span>}
-            </div>
-          ))}
+          {STATIONS
+            .filter((s) => {
+              if (!selectedMode) return true;
+              if ([1, 5, 6].includes(s.id)) return true;
+              if ([2, 3].includes(s.id)) return selectedMode === 'ATOM_ONLY' || selectedMode === 'DUAL';
+              if (s.id === 4) return selectedMode === 'QA_ONLY' || selectedMode === 'DUAL';
+              return true;
+            })
+            .map((s, i, filtered) => (
+              <div key={s.id} className="flex items-center">
+                <button onClick={() => setStation(s.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition ${
+                    station === s.id ? "bg-white shadow-sm border font-medium text-blue-700" :
+                    s.id < station ? "text-green-600" : "text-gray-400"
+                  }`}>
+                  {stationIcon(s.id)}
+                  <span>站{s.id} {s.name}</span>
+                </button>
+                {i < filtered.length - 1 && <span className="text-gray-300 mx-1">→</span>}
+              </div>
+            ))}
         </div>
       </div>
 
