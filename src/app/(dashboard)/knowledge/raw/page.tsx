@@ -41,6 +41,33 @@ const EXP_SOURCE_LABELS: Record<string, string> = {
   E1_COMPANY: "E1 企业", E2_INDUSTRY: "E2 行业", E3_BOOK: "E3 书本",
 };
 
+const CATEGORY_LABELS: Record<string, { text: string; icon: string }> = {
+  CAT_WHO: { text: '身份与受众', icon: '👤' },
+  CAT_WHAT: { text: '产品与卖点', icon: '📦' },
+  CAT_HOW: { text: '方法与流程', icon: '⚙️' },
+  CAT_STYLE: { text: '风格与表达', icon: '🎨' },
+  CAT_FENCE: { text: '红线与合规', icon: '🚫' },
+  CAT_PROOF: { text: '证据与案例', icon: '📊' },
+};
+
+const SUBCATEGORY_LABELS: Record<string, string> = {
+  WHO_BRAND: '品牌定位', WHO_ROLE: '角色人格', WHO_AUDIENCE: '受众画像', WHO_TERM: '术语规范',
+  WHAT_PRODUCT: '产品信息', WHAT_USP: '差异卖点', WHAT_PRICE: '价格体系', WHAT_CERT: '权威背书',
+  HOW_SOP: '标准流程', HOW_METHOD: '方法论', HOW_TACTIC: '技巧策略', HOW_BEST: '最佳实践',
+  STYLE_HOOK: '钩子库', STYLE_WORD: '词库', STYLE_TONE: '语言风格', STYLE_RHYTHM: '结构节奏',
+  FENCE_BAN: '禁用清单', FENCE_ALLOW: '白名单', FENCE_LAW: '法规合规', FENCE_BLUR: '模糊处理',
+  PROOF_CASE: '成功案例', PROOF_DATA: '数据报告', PROOF_FAIL: '反面教训', PROOF_COMPARE: '对比分析',
+};
+
+const SUBCATEGORY_MAP: Record<string, string[]> = {
+  CAT_WHO: ['WHO_BRAND', 'WHO_ROLE', 'WHO_AUDIENCE', 'WHO_TERM'],
+  CAT_WHAT: ['WHAT_PRODUCT', 'WHAT_USP', 'WHAT_PRICE', 'WHAT_CERT'],
+  CAT_HOW: ['HOW_SOP', 'HOW_METHOD', 'HOW_TACTIC', 'HOW_BEST'],
+  CAT_STYLE: ['STYLE_HOOK', 'STYLE_WORD', 'STYLE_TONE', 'STYLE_RHYTHM'],
+  CAT_FENCE: ['FENCE_BAN', 'FENCE_ALLOW', 'FENCE_LAW', 'FENCE_BLUR'],
+  CAT_PROOF: ['PROOF_CASE', 'PROOF_DATA', 'PROOF_FAIL', 'PROOF_COMPARE'],
+};
+
 function formatFileSize(bytes: number | null | undefined): string {
   if (!bytes) return "-";
   if (bytes > 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
@@ -74,6 +101,8 @@ export default function RawMaterialsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [expSourceFilter, setExpSourceFilter] = useState("");
+  const [contentCategoryFilter, setContentCategoryFilter] = useState("");
+  const [contentSubCategoryFilter, setContentSubCategoryFilter] = useState("");
   const [viewMode, setViewMode] = useState<"table" | "card" | "kanban">("table");
   const [showUpload, setShowUpload] = useState(false);
   const [mdSearch, setMdSearch] = useState("");
@@ -97,9 +126,10 @@ export default function RawMaterialsPage() {
       page,
       search: debouncedSearch || undefined,
       format: formatFilter || undefined,
-      materialType: typeFilter || undefined,
       conversionStatus: statusFilter || undefined,
       experienceSource: expSourceFilter || undefined,
+      contentCategory: contentCategoryFilter || undefined,
+      contentSubCategory: contentSubCategoryFilter || undefined,
     },
     { enabled: !!currentProject, refetchInterval: 5000 }
   );
@@ -198,19 +228,25 @@ export default function RawMaterialsPage() {
             <option value="">全部格式</option>
             {["WORD","PDF","PPT","EXCEL","AUDIO","VIDEO","SCREENSHOT","WEB_LINK"].map(f => <option key={f} value={f}>{f}</option>)}
           </select>
-          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
-            <option value="">全部类型</option>
-            {Object.entries(MATERIAL_TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
             <option value="">全部状态</option>
             {[{v:"PENDING",l:"待处理"},{v:"CONVERTING",l:"转换中"},{v:"CONVERTED",l:"已转换"},{v:"FAILED",l:"失败"},{v:"ATOM_PROCESSING",l:"原子化中"},{v:"QA_PROCESSING",l:"QA生成中"},{v:"DUAL_PROCESSING",l:"双轨加工中"},{v:"ATOM_DONE",l:"已原子化"},{v:"QA_DONE",l:"已向量化"},{v:"DUAL_DONE",l:"已入2库"}].map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
           </select>
           <select value={expSourceFilter} onChange={e => setExpSourceFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
             <option value="">全部经验源</option>
-            <option value="E1_COMPANY">E1 企业</option>
-            <option value="E2_INDUSTRY">E2 行业</option>
-            <option value="E3_BOOK">E3 书本</option>
+            <option value="E1_COMPANY">企业经验</option>
+            <option value="E2_INDUSTRY">行业经验</option>
+            <option value="E3_BOOK">书本经验</option>
+          </select>
+          <select value={contentCategoryFilter} onChange={e => { setContentCategoryFilter(e.target.value); setContentSubCategoryFilter(""); }} className="h-9 rounded-lg border px-3 text-sm">
+            <option value="">全部内容类别</option>
+            {Object.entries(CATEGORY_LABELS).map(([k,v]) => <option key={k} value={k}>{v.text}</option>)}
+          </select>
+          <select value={contentSubCategoryFilter} onChange={e => setContentSubCategoryFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm" disabled={!contentCategoryFilter}>
+            <option value="">全部子类别</option>
+            {contentCategoryFilter && (SUBCATEGORY_MAP[contentCategoryFilter] || []).map((sc: string) => (
+              <option key={sc} value={sc}>{SUBCATEGORY_LABELS[sc] || sc}</option>
+            ))}
           </select>
         </div>
 

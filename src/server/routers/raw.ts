@@ -15,6 +15,8 @@ export const rawRouter = router({
       experienceSource: z.string().optional(),
       atomPipelineStatus: z.string().optional(),
       qaPipelineStatus: z.string().optional(),
+      contentCategory: z.string().optional(),
+      contentSubCategory: z.string().optional(),
       page: z.number().default(1),
       pageSize: z.number().default(20),
     }))
@@ -35,6 +37,14 @@ export const rawRouter = router({
       if (input.experienceSource) where.experienceSource = input.experienceSource;
       if (input.atomPipelineStatus) where.atomPipelineStatus = input.atomPipelineStatus;
       if (input.qaPipelineStatus) where.qaPipelineStatus = input.qaPipelineStatus;
+      if (input.contentCategory || input.contentSubCategory) {
+        where.atoms = {
+          some: {
+            ...(input.contentCategory ? { category: input.contentCategory as any } : {}),
+            ...(input.contentSubCategory ? { subcategory: input.contentSubCategory as any } : {}),
+          },
+        };
+      }
 
       const [items, total] = await Promise.all([
         ctx.prisma.raw.findMany({

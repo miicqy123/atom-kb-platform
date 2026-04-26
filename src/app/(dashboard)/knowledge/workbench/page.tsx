@@ -23,6 +23,35 @@ type StatusFilter =
   | 'FAILED';
 
 type SourceFilter = '' | 'E1_COMPANY' | 'E2_INDUSTRY' | 'E3_BOOK';
+type CategoryFilter = '' | 'CAT_WHO' | 'CAT_WHAT' | 'CAT_HOW' | 'CAT_STYLE' | 'CAT_FENCE' | 'CAT_PROOF';
+type SubCategoryFilter = string;
+
+const CATEGORY_LABELS: Record<string, { text: string; icon: string }> = {
+  CAT_WHO: { text: '身份与受众', icon: '👤' },
+  CAT_WHAT: { text: '产品与卖点', icon: '📦' },
+  CAT_HOW: { text: '方法与流程', icon: '⚙️' },
+  CAT_STYLE: { text: '风格与表达', icon: '🎨' },
+  CAT_FENCE: { text: '红线与合规', icon: '🚫' },
+  CAT_PROOF: { text: '证据与案例', icon: '📊' },
+};
+
+const SUBCATEGORY_LABELS: Record<string, string> = {
+  WHO_BRAND: '品牌定位', WHO_ROLE: '角色人格', WHO_AUDIENCE: '受众画像', WHO_TERM: '术语规范',
+  WHAT_PRODUCT: '产品信息', WHAT_USP: '差异卖点', WHAT_PRICE: '价格体系', WHAT_CERT: '权威背书',
+  HOW_SOP: '标准流程', HOW_METHOD: '方法论', HOW_TACTIC: '技巧策略', HOW_BEST: '最佳实践',
+  STYLE_HOOK: '钩子库', STYLE_WORD: '词库', STYLE_TONE: '语言风格', STYLE_RHYTHM: '结构节奏',
+  FENCE_BAN: '禁用清单', FENCE_ALLOW: '白名单', FENCE_LAW: '法规合规', FENCE_BLUR: '模糊处理',
+  PROOF_CASE: '成功案例', PROOF_DATA: '数据报告', PROOF_FAIL: '反面教训', PROOF_COMPARE: '对比分析',
+};
+
+const SUBCATEGORY_MAP: Record<string, string[]> = {
+  CAT_WHO: ['WHO_BRAND', 'WHO_ROLE', 'WHO_AUDIENCE', 'WHO_TERM'],
+  CAT_WHAT: ['WHAT_PRODUCT', 'WHAT_USP', 'WHAT_PRICE', 'WHAT_CERT'],
+  CAT_HOW: ['HOW_SOP', 'HOW_METHOD', 'HOW_TACTIC', 'HOW_BEST'],
+  CAT_STYLE: ['STYLE_HOOK', 'STYLE_WORD', 'STYLE_TONE', 'STYLE_RHYTHM'],
+  CAT_FENCE: ['FENCE_BAN', 'FENCE_ALLOW', 'FENCE_LAW', 'FENCE_BLUR'],
+  CAT_PROOF: ['PROOF_CASE', 'PROOF_DATA', 'PROOF_FAIL', 'PROOF_COMPARE'],
+};
 
 interface RawListItem {
   id: string;
@@ -83,6 +112,8 @@ export default function WorkbenchPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('');
+  const [subCategoryFilter, setSubCategoryFilter] = useState<SubCategoryFilter>('');
   const [selectedRawId, setSelectedRawId] = useState<string | null>(null);
 
   const projectId = currentProject?.id ?? '';
@@ -93,6 +124,8 @@ export default function WorkbenchPage() {
       search: search || undefined,
       conversionStatus: statusFilter || undefined,
       experienceSource: sourceFilter || undefined,
+      contentCategory: categoryFilter || undefined,
+      contentSubCategory: subCategoryFilter || undefined,
       page: 1,
       pageSize: 100,
     },
@@ -196,6 +229,29 @@ export default function WorkbenchPage() {
             <option key={option.value || 'all'} value={option.value}>
               {option.label}
             </option>
+          ))}
+        </select>
+
+        <select
+          value={categoryFilter}
+          onChange={(e) => { setCategoryFilter(e.target.value as CategoryFilter); setSubCategoryFilter(''); }}
+          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        >
+          <option value="">全部内容类别</option>
+          {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+            <option key={k} value={k}>{v.text}</option>
+          ))}
+        </select>
+
+        <select
+          value={subCategoryFilter}
+          onChange={(e) => setSubCategoryFilter(e.target.value as SubCategoryFilter)}
+          disabled={!categoryFilter}
+          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        >
+          <option value="">全部子类别</option>
+          {categoryFilter && (SUBCATEGORY_MAP[categoryFilter] || []).map((sc) => (
+            <option key={sc} value={sc}>{SUBCATEGORY_LABELS[sc] || sc}</option>
           ))}
         </select>
       </div>
