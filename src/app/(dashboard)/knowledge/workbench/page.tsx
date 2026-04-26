@@ -2,65 +2,30 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Loader2,
+  PackageCheck,
+  Split,
+  Workflow,
+} from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { useProjectStore } from '@/stores/projectStore';
-import { RawFileCard } from '@/components/workbench/RawFileCard';
-import { WorkbenchDrawer } from '@/components/workbench/WorkbenchDrawer';
-import { WorkbenchDrawerContent } from '@/components/workbench/WorkbenchDrawerContent';
+import { AtomPipelinePanel } from '@/components/workbench/AtomPipelinePanel';
+import { QAPipelinePanel } from '@/components/workbench/QAPipelinePanel';
+import { DualPipelinePanel } from '@/components/workbench/DualPipelinePanel';
 
-type StatusFilter =
-  | ''
-  | 'PENDING'
-  | 'UPLOADED'
-  | 'CONVERTED'
-  | 'ATOM_PROCESSING'
-  | 'QA_PROCESSING'
-  | 'DUAL_PROCESSING'
-  | 'ATOM_DONE'
-  | 'QA_DONE'
-  | 'DUAL_DONE'
-  | 'FAILED';
+type ProcessingMode = 'ATOM_ONLY' | 'QA_ONLY' | 'DUAL';
 
-type SourceFilter = '' | 'E1_COMPANY' | 'E2_INDUSTRY' | 'E3_BOOK';
-type CategoryFilter = '' | 'CAT_WHO' | 'CAT_WHAT' | 'CAT_HOW' | 'CAT_STYLE' | 'CAT_FENCE' | 'CAT_PROOF';
-type SubCategoryFilter = string;
-
-const CATEGORY_LABELS: Record<string, { text: string; icon: string }> = {
-  CAT_WHO: { text: '身份与受众', icon: '👤' },
-  CAT_WHAT: { text: '产品与卖点', icon: '📦' },
-  CAT_HOW: { text: '方法与流程', icon: '⚙️' },
-  CAT_STYLE: { text: '风格与表达', icon: '🎨' },
-  CAT_FENCE: { text: '红线与合规', icon: '🚫' },
-  CAT_PROOF: { text: '证据与案例', icon: '📊' },
-};
-
-const SUBCATEGORY_LABELS: Record<string, string> = {
-  WHO_BRAND: '品牌定位', WHO_ROLE: '角色人格', WHO_AUDIENCE: '受众画像', WHO_TERM: '术语规范',
-  WHAT_PRODUCT: '产品信息', WHAT_USP: '差异卖点', WHAT_PRICE: '价格体系', WHAT_CERT: '权威背书',
-  HOW_SOP: '标准流程', HOW_METHOD: '方法论', HOW_TACTIC: '技巧策略', HOW_BEST: '最佳实践',
-  STYLE_HOOK: '钩子库', STYLE_WORD: '词库', STYLE_TONE: '语言风格', STYLE_RHYTHM: '结构节奏',
-  FENCE_BAN: '禁用清单', FENCE_ALLOW: '白名单', FENCE_LAW: '法规合规', FENCE_BLUR: '模糊处理',
-  PROOF_CASE: '成功案例', PROOF_DATA: '数据报告', PROOF_FAIL: '反面教训', PROOF_COMPARE: '对比分析',
-};
-
-const SUBCATEGORY_MAP: Record<string, string[]> = {
-  CAT_WHO: ['WHO_BRAND', 'WHO_ROLE', 'WHO_AUDIENCE', 'WHO_TERM'],
-  CAT_WHAT: ['WHAT_PRODUCT', 'WHAT_USP', 'WHAT_PRICE', 'WHAT_CERT'],
-  CAT_HOW: ['HOW_SOP', 'HOW_METHOD', 'HOW_TACTIC', 'HOW_BEST'],
-  CAT_STYLE: ['STYLE_HOOK', 'STYLE_WORD', 'STYLE_TONE', 'STYLE_RHYTHM'],
-  CAT_FENCE: ['FENCE_BAN', 'FENCE_ALLOW', 'FENCE_LAW', 'FENCE_BLUR'],
-  CAT_PROOF: ['PROOF_CASE', 'PROOF_DATA', 'PROOF_FAIL', 'PROOF_COMPARE'],
-};
-
-interface RawListItem {
+interface RawItem {
   id: string;
   title?: string | null;
   originalFileName?: string | null;
-  originalFileUrl?: string | null;
   format: string;
   materialType: string;
-  experienceSource?: string | null;
+  experienceSource: string;
   exposureLevel?: string | null;
   conversionStatus: string;
   processingMode?: string | null;
@@ -68,254 +33,463 @@ interface RawListItem {
   qaPipelineStatus?: string | null;
   atomCount?: number | null;
   qaCount?: number | null;
-  wordCount?: number | null;
   markdownContent?: string | null;
-  createdAt: string | Date;
+  createdAt?: string | Date;
   updatedAt?: string | Date;
 }
 
-const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
-  { value: '', label: '全部状态' },
-  { value: 'PENDING', label: '待处理' },
-  { value: 'UPLOADED', label: '已上传' },
-  { value: 'CONVERTED', label: '已转换' },
-  { value: 'ATOM_PROCESSING', label: '原子化中' },
-  { value: 'QA_PROCESSING', label: 'QA 生成中' },
-  { value: 'DUAL_PROCESSING', label: '全量加工中' },
-  { value: 'ATOM_DONE', label: '原子完成' },
-  { value: 'QA_DONE', label: 'QA 完成' },
-  { value: 'DUAL_DONE', label: '全量完成' },
-  { value: 'FAILED', label: '失败' },
+const MODE_OPTIONS: Array<{
+  value: ProcessingMode;
+  title: string;
+  subtitle: string;
+  description: string;
+  icon: string;
+  accent: string;
+}> = [
+  {
+    value: 'ATOM_ONLY',
+    title: '原子化加工',
+    subtitle: 'Atom 入库',
+    description: 'Markdown → 智能切块 → 三级分类 → 去重校验 → 原子块入库',
+    icon: '🧩',
+    accent: 'border-blue-200 bg-blue-50 hover:border-blue-400',
+  },
+  {
+    value: 'QA_ONLY',
+    title: 'QA 向量库加工',
+    subtitle: 'QA + Embedding',
+    description: 'Markdown → 段落分组 → QA 生成 → Embedding → Qdrant 向量入库',
+    icon: '🔗',
+    accent: 'border-purple-200 bg-purple-50 hover:border-purple-400',
+  },
+  {
+    value: 'DUAL',
+    title: '全量加工',
+    subtitle: '双管线并行',
+    description: '原子化入库与 QA 向量入库同时执行，适合完整知识资产构建',
+    icon: '🚀',
+    accent: 'border-emerald-200 bg-emerald-50 hover:border-emerald-400',
+  },
 ];
 
-const SOURCE_OPTIONS: Array<{ value: SourceFilter; label: string }> = [
-  { value: '', label: '全部来源' },
-  { value: 'E1_COMPANY', label: '企业经验' },
-  { value: 'E2_INDUSTRY', label: '行业经验' },
-  { value: 'E3_BOOK', label: '书本经验' },
-];
+const SOURCE_LABELS: Record<string, string> = {
+  E1_COMPANY: '企业经验',
+  E2_INDUSTRY: '行业经验',
+  E3_BOOK: '书本经验',
+};
 
-const PROCESSING_STATUSES = new Set([
-  'ATOM_PROCESSING',
-  'QA_PROCESSING',
-  'DUAL_PROCESSING',
-]);
+const STATUS_LABELS: Record<string, string> = {
+  PENDING: '待处理',
+  UPLOADED: '已上传',
+  CONVERTING: '转换中',
+  CONVERTED: '已转换',
+  FAILED: '失败',
+  ATOM_PROCESSING: '原子化中',
+  QA_PROCESSING: 'QA 生成中',
+  DUAL_PROCESSING: '全量加工中',
+  ATOM_DONE: '原子完成',
+  QA_DONE: 'QA 完成',
+  DUAL_DONE: '全量完成',
+};
 
-const DONE_STATUSES = new Set([
-  'ATOM_DONE',
-  'QA_DONE',
-  'DUAL_DONE',
-]);
+function getRawTitle(raw: RawItem) {
+  return raw.originalFileName || raw.title || `素材 ${raw.id.slice(0, 6)}`;
+}
+
+function getModeTitle(mode: ProcessingMode | null) {
+  if (!mode) return '';
+  return MODE_OPTIONS.find((item) => item.value === mode)?.title ?? mode;
+}
 
 export default function WorkbenchPage() {
+  const searchParams = useSearchParams();
   const { currentProject } = useProjectStore();
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('');
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('');
-  const [subCategoryFilter, setSubCategoryFilter] = useState<SubCategoryFilter>('');
-  const [selectedRawId, setSelectedRawId] = useState<string | null>(null);
+  const [selectedMode, setSelectedMode] = useState<ProcessingMode | null>(null);
+  const [runningRawIds, setRunningRawIds] = useState<Set<string>>(new Set());
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
+
+  const rawIds = useMemo(() => {
+    const rawIdsParam =
+      searchParams.get('rawIds') || searchParams.get('rawId') || '';
+    return Array.from(new Set(
+      rawIdsParam
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean)
+    ));
+  }, [searchParams]);
 
   const projectId = currentProject?.id ?? '';
 
-  const { data, isLoading } = trpc.raw.list.useQuery(
+  const {
+    data: rawData,
+    isLoading,
+    refetch,
+  } = trpc.raw.getByIds.useQuery(
+    { ids: rawIds },
     {
-      projectId,
-      search: search || undefined,
-      conversionStatus: statusFilter || undefined,
-      experienceSource: sourceFilter || undefined,
-      contentCategory: categoryFilter || undefined,
-      contentSubCategory: subCategoryFilter || undefined,
-      page: 1,
-      pageSize: 100,
-    },
-    {
-      enabled: !!projectId,
-      refetchInterval: 5000,
+      enabled: rawIds.length > 0,
+      refetchInterval: isBatchRunning ? 5000 : false,
     }
   );
 
-  const rawItems: RawListItem[] = useMemo(() => {
-    if (!data?.items) return [];
-    return data.items as RawListItem[];
-  }, [data]);
+  const processWithMode = trpc.pipeline.processWithMode.useMutation();
 
-  const selectedRaw = rawItems.find((raw) => raw.id === selectedRawId) ?? null;
+  const raws: RawItem[] = useMemo(() => {
+    const list = ((rawData ?? []) as RawItem[]).filter(Boolean);
+    const map = new Map<string, RawItem>(list.map((raw) => [raw.id, raw]));
+    return rawIds.map((id) => map.get(id)).filter(Boolean) as RawItem[];
+  }, [rawData, rawIds]);
 
-  const total = data?.total ?? rawItems.length;
-  const processingCount = rawItems.filter((raw) =>
-    PROCESSING_STATUSES.has(raw.conversionStatus)
-  ).length;
-  const doneCount = rawItems.filter((raw) =>
-    DONE_STATUSES.has(raw.conversionStatus)
-  ).length;
-  const convertedCount = rawItems.filter(
-    (raw) => raw.conversionStatus === 'CONVERTED'
-  ).length;
+  const rawTitleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const raw of raws) {
+      map.set(raw.id, getRawTitle(raw));
+    }
+    return map;
+  }, [raws]);
+
+  const handleStart = async (mode: ProcessingMode) => {
+    if (!projectId || rawIds.length === 0) return;
+    setSelectedMode(mode);
+    setBatchError(null);
+    setIsBatchRunning(true);
+    setRunningRawIds(new Set(rawIds));
+
+    try {
+      const results = await Promise.allSettled(
+        rawIds.map((rawId) =>
+          processWithMode.mutateAsync({
+            rawId,
+            projectId,
+            mode,
+          })
+        )
+      );
+
+      const rejectedCount = results.filter(
+        (result) => result.status === 'rejected'
+      ).length;
+      if (rejectedCount > 0) {
+        const msg = `${rejectedCount} 条素材启动或加工失败，请查看下方流程状态`;
+        setBatchError(msg);
+        console.error(`[Workbench] ${rejectedCount} raw(s) failed`, results);
+      }
+    } finally {
+      await refetch();
+      setIsBatchRunning(false);
+      setRunningRawIds(new Set());
+    }
+  };
+
+  // ── 无 rawIds：引导页 ──
+  if (rawIds.length === 0) {
+    return (
+      <div className="p-6">
+        <div className="mx-auto mt-24 max-w-xl rounded-2xl border bg-white p-8 text-center shadow-sm">
+          <div className="mb-4 text-4xl">📥</div>
+          <h1 className="text-lg font-semibold text-gray-900">
+            请先选择 RAW 素材
+          </h1>
+          <p className="mt-2 text-sm text-gray-500">
+            知识加工工作台用于加工已选择的 RAW 素材。请先到 RAW
+            素材管理中选择一个或多个素材进入工作台。
+          </p>
+          <Link
+            href="/knowledge/raw"
+            className="mt-5 inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+          >
+            前往 RAW 素材管理
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 未选择 Project ──
+  if (!currentProject) {
+    return (
+      <div className="p-6">
+        <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+          请先在顶部选择一个 Project，再进入知识加工工作台。
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 space-y-5">
-      {/* ── 顶部 Header ── */}
+    <div className="space-y-6 p-6">
+      {/* ── Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>
+          <div className="mb-2 flex items-center gap-2 text-xs text-gray-400">
+            <Link
+              href="/knowledge/raw"
+              className="inline-flex items-center gap-1 hover:text-blue-600"
+            >
+              <ArrowLeft size={14} />
+              返回 RAW 素材管理
+            </Link>
+          </div>
           <h1 className="text-xl font-semibold text-gray-900">
             知识加工工作台
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            读取 RAW 素材库中的已有素材，点击卡片后进入加工抽屉，选择原子化入库、QA 向量入库或全量加工。
+            对已选择的 RAW 素材进行原子化加工、QA 向量库加工或全量加工。
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-            <span>当前项目：{currentProject?.name ?? '未选择项目'}</span>
-            <span>素材总数：{total}</span>
-            <span>加工中：{processingCount}</span>
-            <span>已完成：{doneCount}</span>
-            <span>已转换待加工：{convertedCount}</span>
+        </div>
+        <div className="rounded-xl border bg-white px-4 py-3 text-right shadow-sm">
+          <div className="text-xs text-gray-400">当前项目</div>
+          <div className="mt-1 text-sm font-medium text-gray-900">
+            {currentProject.name}
           </div>
         </div>
+      </div>
 
-        <div className="flex shrink-0 flex-col items-end gap-2">
+      {/* ── 已选择素材 ── */}
+      <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">
+              已选择 RAW 素材：{rawIds.length} 条
+            </h2>
+            <p className="mt-1 text-xs text-gray-500">
+              这些素材将作为本次加工任务的输入。你可以返回 RAW 素材管理重新选择。
+            </p>
+          </div>
           <Link
             href="/knowledge/raw"
-            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 shadow-sm hover:bg-gray-50"
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
           >
-            前往 RAW 素材管理
+            重新选择
           </Link>
-          <p className="max-w-[220px] text-right text-xs text-gray-400">
-            素材上传、转换、编辑和删除请在 RAW 素材管理中完成。
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center gap-2 rounded-xl bg-gray-50 p-4 text-sm text-gray-500">
+            <Loader2 size={16} className="animate-spin" />
+            正在加载已选择素材...
+          </div>
+        ) : raws.length === 0 ? (
+          <div className="rounded-xl border border-dashed bg-gray-50 p-8 text-center text-sm text-gray-400">
+            未找到对应素材。请返回 RAW 素材管理重新选择。
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {raws.map((raw) => (
+              <div
+                key={raw.id}
+                className="rounded-xl border border-gray-100 bg-gray-50 p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <div className="mt-0.5 text-lg">📄</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-gray-900">
+                      {getRawTitle(raw)}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-gray-500">
+                      <span>{raw.format}</span>
+                      <span>{SOURCE_LABELS[raw.experienceSource] ?? raw.experienceSource}</span>
+                      <span>{STATUS_LABELS[raw.conversionStatus] ?? raw.conversionStatus}</span>
+                    </div>
+                    <div className="mt-2 flex gap-3 text-[11px] text-gray-400">
+                      <span>Atom {raw.atomCount ?? 0}</span>
+                      <span>QA {raw.qaCount ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── 加工模式 ── */}
+      <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold text-gray-900">选择加工模式</h2>
+          <p className="mt-1 text-xs text-gray-500">
+            选择一个模式后，系统会对当前已选择的所有素材执行对应加工流程。
           </p>
         </div>
-      </div>
 
-      {/* 未选择 Project */}
-      {!currentProject && (
-        <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-          请先在顶部选择一个 Project，再进入知识加工工作台。
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {MODE_OPTIONS.map((mode) => {
+            const active = selectedMode === mode.value;
+            const disabled = isBatchRunning;
+
+            return (
+              <button
+                key={mode.value}
+                disabled={disabled}
+                onClick={() => handleStart(mode.value)}
+                className={`rounded-2xl border-2 p-5 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  active
+                    ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100'
+                    : mode.accent
+                }`}
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-2xl">{mode.icon}</span>
+                  {active && (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700">
+                      <CheckCircle2 size={14} />
+                      当前选择
+                    </span>
+                  )}
+                </div>
+                <div className="text-base font-semibold text-gray-900">
+                  {mode.title}
+                </div>
+                <div className="mt-1 text-xs font-medium text-gray-500">
+                  {mode.subtitle}
+                </div>
+                <p className="mt-3 text-xs leading-5 text-gray-600">
+                  {mode.description}
+                </p>
+              </button>
+            );
+          })}
         </div>
-      )}
+      </section>
 
-      {/* ── 筛选栏 ── */}
-      <div className="flex flex-col gap-3 rounded-xl border bg-white p-3 shadow-sm md:flex-row md:items-center">
-        <div className="relative min-w-[240px] flex-1">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索素材名称..."
-            className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-          />
-        </div>
-
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option.value || 'all'} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={sourceFilter}
-          onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-        >
-          {SOURCE_OPTIONS.map((option) => (
-            <option key={option.value || 'all'} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={categoryFilter}
-          onChange={(e) => { setCategoryFilter(e.target.value as CategoryFilter); setSubCategoryFilter(''); }}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-        >
-          <option value="">全部内容类别</option>
-          {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-            <option key={k} value={k}>{v.text}</option>
-          ))}
-        </select>
-
-        <select
-          value={subCategoryFilter}
-          onChange={(e) => setSubCategoryFilter(e.target.value as SubCategoryFilter)}
-          disabled={!categoryFilter}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-        >
-          <option value="">全部子类别</option>
-          {categoryFilter && (SUBCATEGORY_MAP[categoryFilter] || []).map((sc) => (
-            <option key={sc} value={sc}>{SUBCATEGORY_LABELS[sc] || sc}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* ── 文件卡片网格 ── */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div
-              key={index}
-              className="h-40 animate-pulse rounded-xl border bg-gray-50"
-            />
-          ))}
-        </div>
-      ) : rawItems.length === 0 ? (
-        <div className="flex min-h-[360px] items-center justify-center rounded-xl border border-dashed bg-white">
-          <div className="max-w-md text-center">
-            <div className="mb-3 text-4xl">📭</div>
-            <h2 className="text-base font-semibold text-gray-900">
-              暂无可加工素材
-            </h2>
-            <p className="mt-2 text-sm text-gray-500">
-              工作台只加工已有 RAW 素材。请先到 RAW 素材管理中上传、转换或创建素材。
+      {/* ── 加工流程 ── */}
+      <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">加工流程</h2>
+            <p className="mt-1 text-xs text-gray-500">
+              {selectedMode
+                ? `当前模式：${getModeTitle(selectedMode)}`
+                : '请选择上方加工模式，启动后将在这里展示每条素材的执行流程。'}
             </p>
+          </div>
+          {isBatchRunning && (
+            <span className="inline-flex items-center gap-1 text-xs text-blue-600">
+              <Loader2 size={12} className="animate-spin" />
+              正在启动 / 加工中
+            </span>
+          )}
+        </div>
+
+        {batchError && (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {batchError}
+          </div>
+        )}
+
+        {!selectedMode ? (
+          <div className="flex min-h-[220px] items-center justify-center rounded-xl border border-dashed bg-gray-50">
+            <div className="text-center">
+              <Workflow className="mx-auto mb-3 text-gray-300" size={32} />
+              <div className="text-sm font-medium text-gray-700">
+                等待选择加工模式
+              </div>
+              <p className="mt-1 text-xs text-gray-400">
+                选择原子化、QA 向量库或全量加工后，将在此处展示执行流程。
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {rawIds.map((rawId) => {
+              const isRunning = isBatchRunning || runningRawIds.has(rawId);
+              const title =
+                rawTitleMap.get(rawId) || `素材 ${rawId.slice(0, 6)}`;
+
+              return (
+                <div
+                  key={rawId}
+                  className="rounded-2xl border border-gray-100 bg-gray-50 p-4"
+                >
+                  <div className="mb-4 flex items-center justify-between">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-gray-900">
+                        {title}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        Raw ID：{rawId}
+                      </div>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-1 text-[11px] ${
+                        isRunning
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      {isRunning ? '运行中' : '等待 / 已结束'}
+                    </span>
+                  </div>
+
+                  {selectedMode === 'ATOM_ONLY' && (
+                    <AtomPipelinePanel rawId={rawId} isRunning={isRunning} />
+                  )}
+                  {selectedMode === 'QA_ONLY' && (
+                    <QAPipelinePanel rawId={rawId} isRunning={isRunning} />
+                  )}
+                  {selectedMode === 'DUAL' && (
+                    <DualPipelinePanel rawId={rawId} isRunning={isRunning} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── 结果入口 ── */}
+      {selectedMode && (
+        <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold text-gray-900">
+              加工结果与后续操作
+            </h2>
+            <p className="mt-1 text-xs text-gray-500">
+              加工完成后，可以前往原子块浏览器、QA 数据集或分类体系查看入库结果。
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Link
-              href="/knowledge/raw"
-              className="mt-4 inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+              href="/knowledge/atoms"
+              className="rounded-xl border bg-gray-50 p-4 hover:border-blue-300 hover:bg-blue-50"
             >
-              前往 RAW 素材管理
+              <PackageCheck className="mb-2 text-blue-600" size={22} />
+              <div className="text-sm font-medium text-gray-900">
+                查看原子块
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                查看本次生成的 Atom 原子块。
+              </p>
+            </Link>
+            <Link
+              href="/knowledge/qa-pairs"
+              className="rounded-xl border bg-gray-50 p-4 hover:border-purple-300 hover:bg-purple-50"
+            >
+              <Split className="mb-2 text-purple-600" size={22} />
+              <div className="text-sm font-medium text-gray-900">
+                查看 QA 数据集
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                查看生成的问答对和向量入库结果。
+              </p>
+            </Link>
+            <Link
+              href="/knowledge/taxonomy"
+              className="rounded-xl border bg-gray-50 p-4 hover:border-emerald-300 hover:bg-emerald-50"
+            >
+              <PackageCheck className="mb-2 text-emerald-600" size={22} />
+              <div className="text-sm font-medium text-gray-900">
+                查看分类体系
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                按三级分类查看沉淀的知识资产。
+              </p>
             </Link>
           </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {rawItems.map((raw) => (
-            <RawFileCard
-              key={raw.id}
-              raw={raw as any}
-              isSelected={raw.id === selectedRawId}
-              onClick={() => setSelectedRawId(raw.id)}
-            />
-          ))}
-        </div>
+        </section>
       )}
-
-      {/* ── 侧滑抽屉 ── */}
-      <WorkbenchDrawer
-        isOpen={!!selectedRawId}
-        onClose={() => setSelectedRawId(null)}
-        title={selectedRaw?.originalFileName || selectedRaw?.title || '素材加工'}
-      >
-        {selectedRaw && selectedRawId && projectId && (
-          <WorkbenchDrawerContent
-            rawId={selectedRawId}
-            projectId={projectId}
-            fileName={
-              selectedRaw.originalFileName ||
-              selectedRaw.title ||
-              `素材 ${selectedRaw.id.slice(0, 6)}`
-            }
-            experienceSource={selectedRaw.experienceSource ?? null}
-          />
-        )}
-      </WorkbenchDrawer>
     </div>
   );
 }

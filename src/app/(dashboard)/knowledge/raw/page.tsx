@@ -7,8 +7,6 @@ import { useRouter } from "next/navigation";
 import EnterpriseSurveyDialog, { surveyToMarkdown, type SurveyData } from "@/components/knowledge/EnterpriseSurveyDialog";
 import FilePreviewRenderer from "@/components/FilePreviewRenderer";
 import PositionSurveyTab from "@/components/knowledge/position-survey/PositionSurveyTab";
-import { WorkbenchDrawer } from '@/components/workbench/WorkbenchDrawer';
-import { WorkbenchDrawerContent } from '@/components/workbench/WorkbenchDrawerContent';
 import {
   Upload, Search, FileText, FileSpreadsheet, Headphones, Image, Globe,
   Trash2, Eye, RotateCcw, X, AlertCircle, ChevronLeft, ChevronRight,
@@ -111,13 +109,27 @@ export default function RawMaterialsPage() {
   const [previewItem, setPreviewItem] = useState<any>(null);
   const [addingToKb, setAddingToKb] = useState(false);
   const [selectedMdIds, setSelectedMdIds] = useState<Set<string>>(new Set());
+  const [selectedRawIds, setSelectedRawIds] = useState<Set<string>>(new Set());
   const [showSurvey, setShowSurvey] = useState(false);
-  const [drawerRawId, setDrawerRawId] = useState<string | null>(null);
-
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  const goWorkbenchWithIds = (ids: string[]) => {
+    const validIds = ids.filter(Boolean);
+    if (validIds.length === 0) return;
+    router.push(`/knowledge/workbench?rawIds=${validIds.join(',')}`);
+  };
+
+  const toggleRawSelected = (id: string) => {
+    setSelectedRawIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.raw.list.useQuery(
@@ -298,6 +310,27 @@ export default function RawMaterialsPage() {
           <div className="flex h-full">
             {/* 左侧：素材列表 */}
             <div className="w-full overflow-y-auto">
+              {selectedRawIds.size > 0 && (
+                <div className="sticky top-0 z-10 mb-3 mx-3 mt-3 flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+                  <span className="text-xs text-blue-700 font-medium">
+                    已选择 {selectedRawIds.size} 条素材
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => goWorkbenchWithIds(Array.from(selectedRawIds))}
+                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+                    >
+                      批量进入知识加工工作台
+                    </button>
+                    <button
+                      onClick={() => setSelectedRawIds(new Set())}
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      取消选择
+                    </button>
+                  </div>
+                </div>
+              )}
               {isLoading ? (
                 <div className="p-8 text-center text-gray-400">加载中...</div>
               ) : items.length === 0 ? (
@@ -316,6 +349,13 @@ export default function RawMaterialsPage() {
                         "hover:bg-gray-50 border-l-2 border-l-transparent"
                       }`}
                     >
+                      <input
+                        type="checkbox"
+                        checked={selectedRawIds.has(r.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleRawSelected(r.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                      />
                       <div className="shrink-0">{FORMAT_ICONS[r.format] ?? <File className="w-4 h-4" />}</div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{r.title}</div>
@@ -334,6 +374,15 @@ export default function RawMaterialsPage() {
                           {r._count?.qaPairs > 0 && <span>🔗 {r._count.qaPairs}</span>}
                         </div>
                       )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          goWorkbenchWithIds([r.id]);
+                        }}
+                        className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-700 hover:bg-blue-100 shrink-0"
+                      >
+                        进入工作台
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -485,10 +534,10 @@ export default function RawMaterialsPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500">已选 {selectedMdIds.size} 篇</span>
                   <button
-                    onClick={() => { const id = Array.from(selectedMdIds)[0]; if (id) { setDrawerRawId(id); } }}
+                    onClick={() => goWorkbenchWithIds(Array.from(selectedMdIds))}
                     className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
                   >
-                    <ExternalLink className="w-3 h-3" /> 多选进入工作台（首个）
+                    <ExternalLink className="w-3 h-3" /> 批量进入工作台（{selectedMdIds.size}）
                   </button>
                   <button onClick={() => setSelectedMdIds(new Set())} className="text-xs text-gray-400 hover:text-gray-600">取消选择</button>
                 </div>
@@ -538,7 +587,7 @@ export default function RawMaterialsPage() {
                         <span className="text-xs text-gray-400">{r.markdownContent ? r.markdownContent.length + " 字" : ""}</span>
                       </div>
                       <button
-                        onClick={e => { e.stopPropagation(); setDrawerRawId(r.id); }}
+                        onClick={e => { e.stopPropagation(); goWorkbenchWithIds([r.id]); }}
                         className="text-xs text-blue-600 hover:text-blue-700 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         进入工作台 →
@@ -643,29 +692,13 @@ export default function RawMaterialsPage() {
           item={previewItem}
           onClose={() => setPreviewItem(null)}
           onAddToKb={() => addToKb.mutate({ rawId: previewItem.id, projectId: currentProject?.id ?? "" })}
-          onGoWorkbench={() => { const id = previewItem.id; setPreviewItem(null); setDrawerRawId(id); }}
+          onGoWorkbench={() => { const id = previewItem.id; setPreviewItem(null); goWorkbenchWithIds([id]); }}
           addingToKb={addToKb.isPending}
           onStartConversion={() => { startConversion.mutate({ id: previewItem.id }); setPreviewItem(null); }}
           onEdit={() => { setEditingItem(previewItem); setPreviewItem(null); }}
           onDelete={() => { deleteRaw.mutate({ id: previewItem.id }); setPreviewItem(null); }}
         />
       )}
-
-      {/* ── 工作台抽屉（替代原独立页面跳转） ── */}
-      <WorkbenchDrawer
-        isOpen={!!drawerRawId}
-        onClose={() => setDrawerRawId(null)}
-        title="知识加工工作台"
-      >
-        {drawerRawId && (
-          <WorkbenchDrawerContent
-            rawId={drawerRawId}
-            projectId={currentProject?.id ?? ''}
-            fileName=""
-            experienceSource={null}
-          />
-        )}
-      </WorkbenchDrawer>
     </div>
   );
 }
