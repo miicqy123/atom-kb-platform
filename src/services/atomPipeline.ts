@@ -184,20 +184,25 @@ export async function runAtomPipeline(input: AtomPipelineInput): Promise<AtomPip
     await updateAtomProgress(rawId, 4, 'saving', 0, passedAtoms.length);
     for (let i = 0; i < passedAtoms.length; i++) {
       const { chunk, tags, title } = passedAtoms[i];
+      const slotMappings = [
+        tags.primarySlot,
+        ...(Array.isArray(tags.secondarySlots) ? tags.secondarySlots : []),
+      ].filter(Boolean);
+      if (slotMappings.length === 0) slotMappings.push('S10');
       await prisma.atom.create({
         data: {
-          title: title || chunk.slice(0, 60).replace(/\n/g, ' ') + (chunk.length > 60 ? '…' : ''),
+          title: title || chunk.slice(0, 60).replace(/\n/g, ' ') + (chunk.length > 60 ? '...' : ''),
           content: chunk,
-          projectId,
-          rawId,
-          layer: tags.layer as any,
-          granularity: tags.granularity as any,
-          dimensions: tags.dimensions,
-          slotMappings: [tags.primarySlot, ...tags.secondarySlots],
+          project: { connect: { id: projectId } },
+          raw: { connect: { id: rawId } },
+          layer: (tags.layer || 'A') as any,
+          granularity: (tags.granularity || 'ATOM') as any,
+          dimensions: Array.isArray(tags.dimensions) ? tags.dimensions : [],
+          slotMappings,
           experienceSource: raw.experienceSource,
           exposureLevel: raw.exposureLevel,
-          category: tags.category as any,
-          subcategory: tags.subcategory as any,
+          category: (tags.category || 'CAT_WHAT') as any,
+          subcategory: (tags.subcategory || 'WHAT_PRODUCT') as any,
           status: 'DRAFT',
           wordCount: chunk.length,
         },

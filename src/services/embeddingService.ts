@@ -2,7 +2,7 @@
 
 const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY || process.env.QWEN_API_KEY || '';
 const EMBEDDING_MODEL = 'text-embedding-v3';
-const EMBEDDING_DIM = 1536;
+const EMBEDDING_DIM = 1024;
 const DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 
 export interface EmbeddingResult {

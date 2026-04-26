@@ -3,7 +3,7 @@
 const QDRANT_URL = process.env.QDRANT_URL || 'http://localhost:6333';
 const QDRANT_API_KEY = process.env.QDRANT_API_KEY || '';
 const QA_COLLECTION = 'qa_vectors';
-const VECTOR_DIM = 1536;
+const VECTOR_DIM = 1024;
 
 function getHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
