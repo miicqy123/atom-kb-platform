@@ -97,7 +97,7 @@ function WorkbenchContent() {
 
   /* ── 状态 ── */
   const [track, setTrack] = useState<"A" | "B">("A");
-  const [station, setStation] = useState(2);
+  const [station, setStation] = useState(1);
   const [selectedChunk, setSelectedChunk] = useState(0);
   const [activeRawIndex, setActiveRawIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
