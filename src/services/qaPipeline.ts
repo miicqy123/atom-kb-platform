@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { splitIntoSections, generateQAFromSection } from '@/services/qaService';
+import { generateEmbeddingBatch } from '@/services/embeddingService';
+import { upsertVectors } from '@/services/vectorStore';
 
 export interface QAPipelineInput {
   rawId: string;
@@ -78,18 +80,15 @@ export async function runQAPipeline(input: QAPipelineInput): Promise<QAPipelineR
     for (let i = 0; i < flatQAs.length; i++) {
       const qa = flatQAs[i];
       let hasWarning = false;
-      // 问题/答案非空
       if (!qa.question || !qa.answer) {
         result.qualityWarnings++;
         hasWarning = true;
         continue;
       }
-      // 答案最少字数
       if ((qa.answer as string).length < 50) {
         result.qualityWarnings++;
         hasWarning = true;
       }
-      // 必须有 difficulty
       if (!qa.difficulty) {
         qa.difficulty = 'BEGINNER';
         result.qualityWarnings++;
@@ -105,10 +104,7 @@ export async function runQAPipeline(input: QAPipelineInput): Promise<QAPipelineR
     for (let i = 0; i < validQAs.length; i++) {
       const item = validQAs[i];
       const dupCheck = await prisma.qAPair.findFirst({
-        where: {
-          projectId,
-          question: item.qa.question,
-        },
+        where: { projectId, question: item.qa.question },
       });
       if (dupCheck) {
         result.skippedDuplicates++;
@@ -118,11 +114,21 @@ export async function runQAPipeline(input: QAPipelineInput): Promise<QAPipelineR
       await updateQAProgress(rawId, 4, 'deduping', i + 1, validQAs.length);
     }
 
-    // ═══ Step 5：入库 ═══
+    // ═══ Step 5：向量化 + 入库 ═══
     await updateQAProgress(rawId, 5, 'saving', 0, dedupedQAs.length);
+
+    // 5a：收集所有 QA 的文本（用 answer 生成向量）
+    const textsForEmbedding = dedupedQAs.map(item => item.qa.answer);
+
+    // 5b：批量生成 embedding
+    const embeddings = textsForEmbedding.length > 0
+      ? await generateEmbeddingBatch(textsForEmbedding)
+      : [];
+
+    // 5c：同时写入 PostgreSQL + Qdrant
     for (let i = 0; i < dedupedQAs.length; i++) {
       const { qa } = dedupedQAs[i];
-      await prisma.qAPair.create({
+      const saved = await prisma.qAPair.create({
         data: {
           question: qa.question,
           answer: qa.answer,
@@ -136,6 +142,25 @@ export async function runQAPipeline(input: QAPipelineInput): Promise<QAPipelineR
           status: 'DRAFT',
         },
       });
+
+      // 同步写入 Qdrant 向量库
+      if (embeddings[i]) {
+        await upsertVectors([
+          {
+            id: saved.id,
+            vector: embeddings[i].vector,
+            payload: {
+              question: qa.question,
+              answer: qa.answer,
+              projectId,
+              rawId,
+              tags: qa.tags || [],
+              difficulty: qa.difficulty || 'BEGINNER',
+            },
+          },
+        ]);
+      }
+
       result.qaCount++;
       await updateQAProgress(rawId, 5, 'saving', i + 1, dedupedQAs.length);
     }

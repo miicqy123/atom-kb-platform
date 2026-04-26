@@ -1,5 +1,29 @@
 // src/services/qaService.ts
 
+export interface QAGenerationConfig {
+  /** 每段目标 QA 对数 */
+  targetQAPerSection?: number;
+  /** LLM 最大输出 token */
+  maxTokens?: number;
+  /** LLM 温度 */
+  temperature?: number;
+  /** 传入 LLM 的段落字符上限 */
+  sectionCharLimit?: number;
+  /** 答案最少字数（校验用） */
+  minAnswerLength?: number;
+  /** 是否启用质量红线校验 */
+  strictMode?: boolean;
+}
+
+export const DEFAULT_QA_CONFIG: QAGenerationConfig = {
+  targetQAPerSection: 3,
+  maxTokens: 6000,
+  temperature: 0.3,
+  sectionCharLimit: 4000,
+  minAnswerLength: 50,
+  strictMode: true,
+};
+
 export interface QAPairResult {
   question: string;
   answer: string;
@@ -27,24 +51,30 @@ export function splitIntoSections(markdown: string): string[] {
 
 /**
  * 对单个 section 调用 LLM 生成 QA 对（JSON Schema 约束）
+ * @param config 可选配置，缺省使用 DEFAULT_QA_CONFIG
  */
 export async function generateQAFromSection(
   section: string,
-  materialType: string
+  materialType: string,
+  config?: QAGenerationConfig
 ): Promise<QAPairResult[]> {
-  const prompt = `你是企业知识库QA对生成专家。基于以下材料段落生成高质量问答对。
+  const cfg = { ...DEFAULT_QA_CONFIG, ...config };
+  const targetCount = cfg.targetQAPerSection!;
+  const charLimit = cfg.sectionCharLimit!;
+
+  const prompt = `你是企业知识库QA对生成专家。基于以下材料段落生成 ${targetCount} 个高质量问答对。
 
 材料类型：${materialType}
 材料内容：
 """
-${section.slice(0, 4000)}
+${section.slice(0, charLimit)}
 """
 
 严格按以下JSON数组格式返回：
 [
   {
     "question": "场景化自然语言问题",
-    "answer": "结构化答案（≥400字）：核心观点→机理解释→案例→实操建议→踩坑预警→适用边界→可复用公式",
+    "answer": "结构化答案（≥${cfg.minAnswerLength}字）：核心观点→机理解释→案例→实操建议→踩坑预警→适用边界→可复用公式",
     "tags": ["标签1", "标签2"],
     "scenarios": "适用场景描述",
     "questionKeywords": ["关键词1", "关键词2", "关键词3"],
@@ -52,12 +82,12 @@ ${section.slice(0, 4000)}
   }
 ]
 
-每个段落生成 2-5 个 QA 对。质量红线：禁止编造数据。`;
+每个段落生成 ${targetCount} 个 QA 对。${cfg.strictMode ? '质量红线：禁止编造数据。' : ''}`;
 
   const { callLLM } = await import('@/server/services/modelGateway');
   const result = await callLLM('qa_generation', '', prompt, {
-    maxTokens: 6000,
-    temperature: 0.3,
+    maxTokens: cfg.maxTokens,
+    temperature: cfg.temperature,
   });
 
   try {
