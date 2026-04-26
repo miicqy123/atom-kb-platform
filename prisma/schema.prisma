@@ -847,6 +847,8 @@ enum AssetStatus {
   DRAFT
   TESTING
   ACTIVE
+  PUBLISHED
+  REJECTED
   ARCHIVED
 }
 

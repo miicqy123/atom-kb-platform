@@ -34,6 +34,7 @@ import { packRouter } from './pack';
 import { cloneRouter } from './clone';
 import { promptRouter } from './prompt';
 import { taskRouter } from './task';
+import { qualityCheckRouter } from './qualityCheck';
 
 export const appRouter = router({
   prompt: promptRouter,
@@ -72,6 +73,7 @@ export const appRouter = router({
   pack: packRouter,
   clone: cloneRouter,
   task: taskRouter,
+  qualityCheck: qualityCheckRouter,
 });
 
 export type AppRouter = typeof appRouter;

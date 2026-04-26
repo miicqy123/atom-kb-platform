@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { AtomPipelinePanel } from './AtomPipelinePanel';
 import { QAPipelinePanel } from './QAPipelinePanel';
 import { DualPipelinePanel } from './DualPipelinePanel';
+import { QualityCheckPanel } from './QualityCheckPanel';
 import { ClassificationBadge } from '@/components/shared/ClassificationBadge';
 import { trpc } from '@/lib/trpc';
 
@@ -24,7 +25,7 @@ const MODE_OPTIONS: Array<{ value: ProcessingMode; label: string; icon: string; 
 export function WorkbenchDrawerContent({ rawId, projectId, fileName, experienceSource }: Props) {
   const [selectedMode, setSelectedMode] = useState<ProcessingMode | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [activeTab, setActiveTab] = useState<'process' | 'preview' | 'results'>('process');
+  const [activeTab, setActiveTab] = useState<'process' | 'preview' | 'results' | 'quality'>('process');
 
   const { data: rawDetail } = trpc.raw.getById.useQuery(
     { id: rawId },
@@ -61,6 +62,7 @@ export function WorkbenchDrawerContent({ rawId, projectId, fileName, experienceS
           { key: 'process', label: '⚙️ 加工' },
           { key: 'preview', label: '📄 Markdown' },
           { key: 'results', label: '📊 结果' },
+          { key: 'quality', label: '🔍 质量检查' },
         ].map(tab => (
           <button
             key={tab.key}
@@ -181,6 +183,11 @@ export function WorkbenchDrawerContent({ rawId, projectId, fileName, experienceS
               </div>
             )}
           </div>
+        )}
+
+        {/* ── Tab: 质量检查 ── */}
+        {activeTab === 'quality' && (
+          <QualityCheckPanel rawId={rawId} />
         )}
       </div>
     </div>
