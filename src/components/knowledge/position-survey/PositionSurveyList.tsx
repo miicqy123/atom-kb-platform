@@ -1,7 +1,7 @@
 "use client";
 import { File, Building2, Calendar, Brain, Zap } from "lucide-react";
 
-interface PositionSurveyRecord {
+export interface PositionSurveyRecord {
   id: string;
   title: string;
   createdAt: string;

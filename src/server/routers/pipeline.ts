@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { router, protectedProcedure, permissionProcedure } from '../trpc';
 import { prisma } from '@/lib/prisma';
 import { normalizeToMarkdown, chunkMarkdown, autoTag } from '@/services/pipelineService';
+import { runAtomPipeline } from '@/services/atomPipeline';
+import { runQAPipeline } from '@/services/qaPipeline';
 import fs from 'fs';
 import path from 'path';
 
@@ -117,13 +119,14 @@ export const pipelineRouter = router({
       return prisma.raw.findUniqueOrThrow({
         where: { id: input.rawId },
         select: {
+          conversionStatus: true,
+          processingMode: true,
           atomPipelineStatus: true,
           atomPipelineProgress: true,
           qaPipelineStatus: true,
           qaPipelineProgress: true,
           atomCount: true,
           qaCount: true,
-          processingMode: true,
         },
       });
     }),
@@ -136,19 +139,31 @@ export const pipelineRouter = router({
       mode: z.enum(['ATOM_ONLY', 'QA_ONLY', 'DUAL']),
     }))
     .mutation(async ({ input }) => {
-      const raw = await prisma.raw.findUniqueOrThrow({ where: { id: input.rawId } });
+      const { rawId, projectId, mode } = input;
 
-      const initialStatusMap: Record<string, string> = {
+      const statusMap: Record<'ATOM_ONLY' | 'QA_ONLY' | 'DUAL', string> = {
         ATOM_ONLY: 'ATOM_PROCESSING',
         QA_ONLY: 'QA_PROCESSING',
         DUAL: 'DUAL_PROCESSING',
       };
 
+      const finalStatusMap: Record<'ATOM_ONLY' | 'QA_ONLY' | 'DUAL', string> = {
+        ATOM_ONLY: 'ATOM_DONE',
+        QA_ONLY: 'QA_DONE',
+        DUAL: 'DUAL_DONE',
+      };
+
       await prisma.raw.update({
-        where: { id: input.rawId },
+        where: { id: rawId },
         data: {
-          conversionStatus: initialStatusMap[input.mode] as any,
-          processingMode: input.mode as any,
+          conversionStatus: statusMap[mode] as any,
+          processingMode: mode as any,
+          atomPipelineStatus:
+            mode === 'ATOM_ONLY' || mode === 'DUAL' ? 'idle' : null,
+          qaPipelineStatus:
+            mode === 'QA_ONLY' || mode === 'DUAL' ? 'idle' : null,
+          atomPipelineProgress: null,
+          qaPipelineProgress: null,
         },
       });
 
@@ -156,101 +171,67 @@ export const pipelineRouter = router({
       let qaCount = 0;
 
       try {
-        // 确保有 markdownContent
-        let markdown = raw.markdownContent;
-        if (!markdown) {
-          const filePath = path.join(process.cwd(), 'uploads', raw.originalFileName || '');
-          const buffer = fs.existsSync(filePath)
-            ? fs.readFileSync(filePath)
-            : Buffer.from('', 'utf-8');
-          markdown = await normalizeToMarkdown(buffer, raw.format);
+        if (mode === 'ATOM_ONLY') {
+          const result = await runAtomPipeline({ rawId, projectId });
+          atomCount = result.atomCount;
         }
 
-        // 管线 A：原子化入库
-        if (input.mode === 'ATOM_ONLY' || input.mode === 'DUAL') {
-          const chunks = await chunkMarkdown(markdown);
-          const atoms = await Promise.all(
-            chunks.map(async (chunk) => {
-              const tags = await autoTag(chunk);
-              const { checkDuplicate } = await import('@/services/deduplication');
-              const dedup = await checkDuplicate(input.projectId, chunk);
-              if (dedup.isDuplicate) {
-                console.log(`跳过重复原子块，相似度 ${dedup.similarity}，已有 ${dedup.similarAtomId}`);
-                return null;
-              }
-              return prisma.atom.create({
-                data: {
-                  title: chunk.slice(0, 60).replace(/\n/g, ' ') + (chunk.length > 60 ? '…' : ''),
-                  content: chunk,
-                  projectId: input.projectId,
-                  rawId: input.rawId,
-                  layer: tags.layer,
-                  granularity: tags.granularity,
-                  dimensions: tags.dimensions,
-                  slotMappings: [tags.primarySlot, ...tags.secondarySlots],
-                  experienceSource: raw.experienceSource,
-                  exposureLevel: raw.exposureLevel,
-                  category: tags.category,
-                  subcategory: tags.subcategory,
-                  status: 'DRAFT',
-                  wordCount: chunk.length,
-                },
-              });
-            })
-          ).then(results => results.filter(Boolean));
-          atomCount = atoms.length;
+        if (mode === 'QA_ONLY') {
+          const result = await runQAPipeline({ rawId, projectId });
+          qaCount = result.qaCount;
         }
 
-        // 管线 B：QA 向量入库
-        if (input.mode === 'QA_ONLY' || input.mode === 'DUAL') {
-          const { generateQAPairs } = await import('@/services/qaService');
-          const pairs = await generateQAPairs(markdown, raw.materialType);
+        if (mode === 'DUAL') {
+          const [atomResult, qaResult] = await Promise.allSettled([
+            runAtomPipeline({ rawId, projectId }),
+            runQAPipeline({ rawId, projectId }),
+          ]);
 
-          await Promise.all(
-            pairs.map((p) =>
-              prisma.qAPair.create({
-                data: {
-                  question: p.question,
-                  answer: p.answer,
-                  projectId: input.projectId,
-                  rawId: input.rawId,
-                  tags: p.tags,
-                  scenarios: [p.scenarios],
-                  questionKeywords: p.questionKeywords,
-                  difficulty: p.difficulty,
-                  materialType: raw.materialType,
-                  status: 'DRAFT',
-                  answerWordCount: p.answer.length,
-                  version: 1,
-                },
-              })
-            )
-          );
-          qaCount = pairs.length;
+          if (atomResult.status === 'fulfilled') {
+            atomCount = atomResult.value.atomCount;
+          } else {
+            console.error('[DUAL] Atom pipeline failed:', atomResult.reason);
+            await prisma.raw.update({
+              where: { id: rawId },
+              data: { atomPipelineStatus: 'failed' },
+            });
+          }
+
+          if (qaResult.status === 'fulfilled') {
+            qaCount = qaResult.value.qaCount;
+          } else {
+            console.error('[DUAL] QA pipeline failed:', qaResult.reason);
+            await prisma.raw.update({
+              where: { id: rawId },
+              data: { qaPipelineStatus: 'failed' },
+            });
+          }
         }
-
-        // 更新终态
-        const finalStatusMap: Record<string, string> = {
-          ATOM_ONLY: 'ATOM_DONE',
-          QA_ONLY: 'QA_DONE',
-          DUAL: 'DUAL_DONE',
-        };
 
         await prisma.raw.update({
-          where: { id: input.rawId },
+          where: { id: rawId },
           data: {
-            conversionStatus: finalStatusMap[input.mode] as any,
-            markdownContent: markdown,
+            conversionStatus: finalStatusMap[mode] as any,
             atomCount,
             qaCount,
           },
         });
 
-        return { atomCount, qaCount, mode: input.mode };
+        return {
+          atomCount,
+          qaCount,
+          mode,
+        };
       } catch (error) {
         await prisma.raw.update({
-          where: { id: input.rawId },
-          data: { conversionStatus: 'FAILED' },
+          where: { id: rawId },
+          data: {
+            conversionStatus: 'FAILED' as any,
+            atomPipelineStatus:
+              mode === 'ATOM_ONLY' || mode === 'DUAL' ? 'failed' : undefined,
+            qaPipelineStatus:
+              mode === 'QA_ONLY' || mode === 'DUAL' ? 'failed' : undefined,
+          },
         });
         throw error;
       }

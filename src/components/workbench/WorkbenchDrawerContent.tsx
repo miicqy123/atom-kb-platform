@@ -48,9 +48,47 @@ export function WorkbenchDrawerContent({ rawId, projectId, fileName, experienceS
     { refetchInterval: isRunning ? 1500 : false }
   );
 
-  // 判断是否已有处理结果
-  const hasPipelineRun = progress?.atomPipelineStatus || progress?.qaPipelineStatus;
-  const pipelineDone = progress?.atomPipelineStatus === 'done' || progress?.qaPipelineStatus === 'done';
+  // ── 状态计算：按 mode 分别判断 ──
+  const mode = selectedMode || progress?.processingMode;
+  const atomStatus = progress?.atomPipelineStatus;
+  const qaStatus = progress?.qaPipelineStatus;
+
+  const atomStarted = !!atomStatus && atomStatus !== 'idle';
+  const qaStarted = !!qaStatus && qaStatus !== 'idle';
+  const atomDone = atomStatus === 'done';
+  const qaDone = qaStatus === 'done';
+  const atomFailed = atomStatus === 'failed';
+  const qaFailed = qaStatus === 'failed';
+  const atomTerminal = atomDone || atomFailed;
+  const qaTerminal = qaDone || qaFailed;
+
+  const hasPipelineRun =
+    mode === 'ATOM_ONLY'  ? !!atomStatus
+    : mode === 'QA_ONLY'  ? !!qaStatus
+    : mode === 'DUAL'     ? (!!atomStatus || !!qaStatus)
+    : (!!atomStatus || !!qaStatus);
+
+  const pipelineDone =
+    mode === 'ATOM_ONLY'  ? atomDone
+    : mode === 'QA_ONLY'  ? qaDone
+    : mode === 'DUAL'     ? (atomDone && qaDone)
+    : (atomDone || qaDone);
+
+  const pipelinePartialDone =
+    mode === 'DUAL' &&
+    ((atomDone && qaFailed) || (atomFailed && qaDone));
+
+  const pipelineFailed =
+    mode === 'ATOM_ONLY'  ? atomFailed
+    : mode === 'QA_ONLY'  ? qaFailed
+    : mode === 'DUAL'     ? (atomFailed && qaFailed)
+    : (atomFailed || qaFailed);
+
+  const pipelineTerminal =
+    mode === 'ATOM_ONLY'  ? atomTerminal
+    : mode === 'QA_ONLY'  ? qaTerminal
+    : mode === 'DUAL'     ? (atomTerminal && qaTerminal)
+    : (atomTerminal || qaTerminal);
 
   const detail = rawDetail as { wordCount?: number | null; markdownContent?: string | null } | undefined;
 
@@ -130,7 +168,7 @@ export function WorkbenchDrawerContent({ rawId, projectId, fileName, experienceS
                 )}
 
                 {/* 完成后显示重新加工按钮 */}
-                {pipelineDone && !isRunning && (
+                {pipelineTerminal && !isRunning && (
                   <button
                     onClick={() => {
                       setSelectedMode(null);
@@ -161,7 +199,19 @@ export function WorkbenchDrawerContent({ rawId, projectId, fileName, experienceS
         {/* ── Tab: 加工结果 ── */}
         {activeTab === 'results' && (
           <div className="space-y-4">
-            {pipelineDone ? (
+            {!hasPipelineRun && (
+              <div className="text-center text-gray-400 py-12">
+                请先在「加工」Tab 中启动加工流程
+              </div>
+            )}
+
+            {hasPipelineRun && !pipelineTerminal && (
+              <div className="text-center text-gray-400 py-12">
+                ⏳ 加工进行中，请稍后查看结果
+              </div>
+            )}
+
+            {pipelineDone && (
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-4 bg-green-50 rounded-xl text-center">
@@ -173,21 +223,62 @@ export function WorkbenchDrawerContent({ rawId, projectId, fileName, experienceS
                     <div className="text-xs text-purple-600 mt-1">❓ QA 对</div>
                   </div>
                 </div>
+                <div className="text-xs text-green-600 text-center font-medium">
+                  ✅ 加工全部完成
+                </div>
                 <div className="text-xs text-gray-400 text-center">
                   详细原子块和 QA 列表请前往「分类体系」或「QA 库」页面查看
                 </div>
               </>
-            ) : (
-              <div className="text-center text-gray-400 py-12">
-                请先在「加工」Tab 中启动加工流程
-              </div>
+            )}
+
+            {pipelinePartialDone && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={`p-4 rounded-xl text-center ${atomDone ? 'bg-green-50' : 'bg-red-50'}`}>
+                    <div className="text-2xl font-bold text-green-700">{progress?.atomCount ?? 0}</div>
+                    <div className="text-xs mt-1">{atomDone ? '🧱 原子块 ✅' : '🧱 原子块 ❌'}</div>
+                  </div>
+                  <div className={`p-4 rounded-xl text-center ${qaDone ? 'bg-purple-50' : 'bg-red-50'}`}>
+                    <div className="text-2xl font-bold text-purple-700">{progress?.qaCount ?? 0}</div>
+                    <div className="text-xs mt-1">{qaDone ? '❓ QA 对 ✅' : '❓ QA 对 ❌'}</div>
+                  </div>
+                </div>
+                <div className="text-xs text-amber-600 text-center font-medium">
+                  ⚠️ 部分完成：一条管线成功，另一条失败。请查看加工 Tab 中的管线状态
+                </div>
+              </>
+            )}
+
+            {pipelineFailed && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-4 bg-red-50 rounded-xl text-center">
+                    <div className="text-2xl font-bold text-red-700">{progress?.atomCount ?? 0}</div>
+                    <div className="text-xs text-red-600 mt-1">🧱 原子块 ❌</div>
+                  </div>
+                  <div className="p-4 bg-red-50 rounded-xl text-center">
+                    <div className="text-2xl font-bold text-red-700">{progress?.qaCount ?? 0}</div>
+                    <div className="text-xs text-red-600 mt-1">❓ QA 对 ❌</div>
+                  </div>
+                </div>
+                <div className="text-xs text-red-600 text-center font-medium">
+                  ❌ 加工失败：请查看加工 Tab 中的错误状态后重新加工
+                </div>
+              </>
             )}
           </div>
         )}
 
         {/* ── Tab: 质量检查 ── */}
         {activeTab === 'quality' && (
-          <QualityCheckPanel rawId={rawId} />
+          pipelineDone || pipelinePartialDone ? (
+            <QualityCheckPanel rawId={rawId} />
+          ) : (
+            <div className="p-8 text-center text-sm text-gray-400">
+              请先完成至少一条加工管线，再进行质量检查
+            </div>
+          )
         )}
       </div>
     </div>

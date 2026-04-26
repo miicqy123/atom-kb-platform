@@ -7,6 +7,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { generatePositionMarkdown, type PositionSurveyFormData } from "./types";
 import PositionSurveyForm from "./PositionSurveyForm";
 import PositionSurveyList from "./PositionSurveyList";
+import type { PositionSurveyRecord } from "./PositionSurveyList";
 
 export default function PositionSurveyTab() {
   const router = useRouter();
@@ -32,9 +33,13 @@ export default function PositionSurveyTab() {
   });
   const updateRaw = trpc.raw.update.useMutation();
 
-  const items = (Array.isArray(data?.items) ? data.items : []).filter(
-    (r: any) => r.title?.startsWith("岗位调研")
-  );
+  const items: PositionSurveyRecord[] = (Array.isArray(data?.items) ? data.items : [])
+    .filter((r: any) => r.title?.startsWith("岗位调研") && r.id)
+    .map((item) => ({
+      id: item.id,
+      title: item.title ?? item.originalFileName ?? '未命名调研',
+      createdAt: item.createdAt,
+    }));
 
   const handleSubmit = useCallback(
     async (formData: PositionSurveyFormData, attachments: { name: string; url: string }[]) => {

@@ -45,6 +45,7 @@ export const rawRouter = router({
           select: {
             id: true,
             originalFileName: true,
+            originalFileUrl: true,
             title: true,
             format: true,
             materialType: true,
@@ -56,6 +57,7 @@ export const rawRouter = router({
             qaPipelineStatus: true,
             atomCount: true,
             qaCount: true,
+            markdownContent: true,
             createdAt: true,
             updatedAt: true,
           },

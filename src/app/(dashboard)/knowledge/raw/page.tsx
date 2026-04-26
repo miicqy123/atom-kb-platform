@@ -1007,7 +1007,7 @@ function EditModal({ item, onClose, onSuccess }: { item: any; onClose: () => voi
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={onClose} className="rounded-lg border px-4 py-2 text-sm">取消</button>
           <button onClick={() => updateRaw.mutate({ id: item.id, data: form })} className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">
-            {updateRaw.isLoading ? "保存中..." : "保存"}
+            {updateRaw.isPending ? "保存中..." : "保存"}
           </button>
         </div>
       </div>
