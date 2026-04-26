@@ -518,14 +518,14 @@ export default function RawMaterialsPage() {
                       const key = r.materialType || "OTHER";
                       acc[key] = (acc[key] || 0) + 1;
                       return acc;
-                    }, {})
+                    }, {} as Record<string, number>)
                   ).map(([type, count]) => (
                     <button
                       key={type}
                       onClick={() => setMdCategoryFilter(type === mdCategoryFilter ? "" : type)}
                       className={`px-2.5 py-1 rounded-full text-xs transition ${mdCategoryFilter === type ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
                     >
-                      {MATERIAL_TYPE_LABELS[type] || type} ({count})
+                      {MATERIAL_TYPE_LABELS[type] || type} ({(count as number)})
                     </button>
                   ))}
                 </div>
