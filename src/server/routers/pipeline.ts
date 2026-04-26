@@ -123,6 +123,7 @@ export const pipelineRouter = router({
           qaPipelineProgress: true,
           atomCount: true,
           qaCount: true,
+          processingMode: true,
         },
       });
     }),

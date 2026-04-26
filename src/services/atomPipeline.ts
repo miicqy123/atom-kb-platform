@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
-import { chunkMarkdown, autoTag, normalizeToMarkdown } from '@/services/pipelineService';
+import { normalizeToMarkdown } from '@/services/pipelineService';
 import { checkDuplicate } from '@/services/deduplication';
+import { smartChunkMarkdown } from '@/services/smartChunker';
 import fs from 'fs';
 import path from 'path';
 
@@ -30,7 +31,7 @@ async function updateAtomProgress(
       atomPipelineStatus: stepName,
       atomPipelineProgress: {
         currentStep,
-        totalSteps: 5,
+        totalSteps: 4,
         stepName,
         processed,
         total,
@@ -51,8 +52,8 @@ export async function runAtomPipeline(input: AtomPipelineInput): Promise<AtomPip
   };
 
   try {
-    // ═══ Step 1：Markdown 解析 ═══
-    await updateAtomProgress(rawId, 1, 'parsing', 0, 1);
+    // ═══ Step 1：LLM 智能切块 + 三级分类（合并原 Step1+2）═══
+    await updateAtomProgress(rawId, 1, 'smart_chunking', 0, 1);
     let markdown = raw.markdownContent;
     if (!markdown) {
       const filePath = path.join(process.cwd(), 'uploads', raw.originalFileName || '');
@@ -61,20 +62,75 @@ export async function runAtomPipeline(input: AtomPipelineInput): Promise<AtomPip
         : Buffer.from('', 'utf-8');
       markdown = await normalizeToMarkdown(buffer, raw.format);
     }
-    const chunks = await chunkMarkdown(markdown);
-    await updateAtomProgress(rawId, 1, 'parsing', 1, 1);
 
-    // ═══ Step 2：LLM 三级分类打标 ═══
-    await updateAtomProgress(rawId, 2, 'classifying', 0, chunks.length);
-    const taggedChunks: Array<{ chunk: string; tags: Awaited<ReturnType<typeof autoTag>> }> = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const tags = await autoTag(chunks[i]);
-      taggedChunks.push({ chunk: chunks[i], tags });
-      await updateAtomProgress(rawId, 2, 'classifying', i + 1, chunks.length);
+    interface TaggedChunk {
+      chunk: string;
+      tags: {
+        category: string | null;
+        subcategory: string | null;
+        layer: string | null;
+        granularity: string | null;
+        dimensions: number[];
+        primarySlot: string;
+        secondarySlots: string[];
+      };
+      needsReview: boolean;
+      title: string;
     }
 
-    // ═══ Step 3：校验 · 去重 ═══
-    await updateAtomProgress(rawId, 3, 'deduping', 0, taggedChunks.length);
+    let taggedChunks: TaggedChunk[];
+
+    try {
+      const chunkResult = await smartChunkMarkdown(
+        markdown,
+        raw.materialType,
+        raw.experienceSource || 'E1_COMPANY'
+      );
+
+      taggedChunks = chunkResult.chunks.map(c => ({
+        chunk: c.content,
+        tags: {
+          category: c.category,
+          subcategory: c.subcategory,
+          layer: null,
+          granularity: null,
+          dimensions: [],
+          primarySlot: '',
+          secondarySlots: [],
+        },
+        needsReview: c.qualityFlags.needsReview,
+        title: c.title,
+      }));
+    } catch (e) {
+      // 降级：smartChunkMarkdown 失败 → 旧规则切块 + autoTag
+      console.warn('[atomPipeline] smartChunkMarkdown failed, falling back:', e);
+      const { chunkMarkdown, autoTag } = await import('@/services/pipelineService');
+      const chunks = await chunkMarkdown(markdown);
+      const fallbackChunks: TaggedChunk[] = [];
+      for (const chunk of chunks) {
+        const tags = await autoTag(chunk);
+        fallbackChunks.push({
+          chunk,
+          tags: {
+            category: tags.category,
+            subcategory: tags.subcategory,
+            layer: tags.layer,
+            granularity: tags.granularity,
+            dimensions: tags.dimensions,
+            primarySlot: tags.primarySlot,
+            secondarySlots: tags.secondarySlots,
+          },
+          needsReview: tags.layer === 'C' || tags.layer === 'D',
+          title: chunk.slice(0, 60).replace(/\n/g, ' ') + (chunk.length > 60 ? '…' : ''),
+        });
+      }
+      taggedChunks = fallbackChunks;
+    }
+
+    await updateAtomProgress(rawId, 1, 'smart_chunking', 1, 1);
+
+    // ═══ Step 2：校验 · 去重（原 Step 3）═══
+    await updateAtomProgress(rawId, 2, 'deduping', 0, taggedChunks.length);
     const validAtoms: typeof taggedChunks = [];
     for (let i = 0; i < taggedChunks.length; i++) {
       const item = taggedChunks[i];
@@ -90,7 +146,7 @@ export async function runAtomPipeline(input: AtomPipelineInput): Promise<AtomPip
         };
         const valid = CATEGORY_SUBCATEGORY_MAP[item.tags.category];
         if (valid && !valid.includes(item.tags.subcategory)) {
-          item.tags.subcategory = null; // 互斥校验失败，清空子类别
+          item.tags.subcategory = null;
         }
       }
       // 去重
@@ -100,40 +156,37 @@ export async function runAtomPipeline(input: AtomPipelineInput): Promise<AtomPip
       } else {
         validAtoms.push(item);
       }
-      await updateAtomProgress(rawId, 3, 'deduping', i + 1, taggedChunks.length);
+      await updateAtomProgress(rawId, 2, 'deduping', i + 1, taggedChunks.length);
     }
 
-    // ═══ Step 4：质量检查 ═══
-    await updateAtomProgress(rawId, 4, 'checking', 0, validAtoms.length);
+    // ═══ Step 3：质量检查（原 Step 4）═══
+    await updateAtomProgress(rawId, 3, 'checking', 0, validAtoms.length);
     const passedAtoms: typeof validAtoms = [];
     for (let i = 0; i < validAtoms.length; i++) {
       const item = validAtoms[i];
       let hasWarning = false;
-      // 字数检查
       if (item.chunk.length < 50) {
         result.qualityWarnings++;
         hasWarning = true;
       }
-      // 分类完整性
       if (!item.tags.category || !item.tags.subcategory) {
         result.qualityWarnings++;
         hasWarning = true;
       }
-      // C/D 层标记需人工确认
       if (item.tags.layer === 'C' || item.tags.layer === 'D') {
         result.needsReview++;
       }
       passedAtoms.push(item);
-      await updateAtomProgress(rawId, 4, 'checking', i + 1, validAtoms.length);
+      await updateAtomProgress(rawId, 3, 'checking', i + 1, validAtoms.length);
     }
 
-    // ═══ Step 5：入库确认 ═══
-    await updateAtomProgress(rawId, 5, 'saving', 0, passedAtoms.length);
+    // ═══ Step 4：入库确认（原 Step 5）═══
+    await updateAtomProgress(rawId, 4, 'saving', 0, passedAtoms.length);
     for (let i = 0; i < passedAtoms.length; i++) {
-      const { chunk, tags } = passedAtoms[i];
+      const { chunk, tags, title } = passedAtoms[i];
       await prisma.atom.create({
         data: {
-          title: chunk.slice(0, 60).replace(/\n/g, ' ') + (chunk.length > 60 ? '…' : ''),
+          title: title || chunk.slice(0, 60).replace(/\n/g, ' ') + (chunk.length > 60 ? '…' : ''),
           content: chunk,
           projectId,
           rawId,
@@ -150,7 +203,7 @@ export async function runAtomPipeline(input: AtomPipelineInput): Promise<AtomPip
         },
       });
       result.atomCount++;
-      await updateAtomProgress(rawId, 5, 'saving', i + 1, passedAtoms.length);
+      await updateAtomProgress(rawId, 4, 'saving', i + 1, passedAtoms.length);
     }
 
     // 完成

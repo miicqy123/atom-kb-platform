@@ -10,8 +10,7 @@ interface Props {
 }
 
 const ATOM_STEPS = [
-  { key: 'parsing', label: 'Markdown 解析' },
-  { key: 'classifying', label: '三级分类打标' },
+  { key: 'smart_chunking', label: 'LLM 智能切块' },
   { key: 'deduping', label: '校验·去重' },
   { key: 'checking', label: '质量检查' },
   { key: 'saving', label: '入库确认' },

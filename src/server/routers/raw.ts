@@ -7,21 +7,34 @@ export const rawRouter = router({
       projectId: z.string(),
       format: z.string().optional(),
       conversionStatus: z.string().optional(),
+      /** status 是 conversionStatus 的别名 */
+      status: z.string().optional(),
       search: z.string().optional(),
       titlePrefix: z.string().optional(),
       materialType: z.string().optional(),
       experienceSource: z.string().optional(),
+      atomPipelineStatus: z.string().optional(),
+      qaPipelineStatus: z.string().optional(),
       page: z.number().default(1),
       pageSize: z.number().default(20),
     }))
     .query(async ({ ctx, input }) => {
       const where: any = { projectId: input.projectId };
       if (input.format) where.format = input.format;
-      if (input.conversionStatus) where.conversionStatus = input.conversionStatus;
-      if (input.search) where.title = { contains: input.search, mode: "insensitive" };
-      else if (input.titlePrefix) where.title = { startsWith: input.titlePrefix };
+      const cs = input.conversionStatus || input.status;
+      if (cs) where.conversionStatus = cs;
+      if (input.search) {
+        where.OR = [
+          { title: { contains: input.search, mode: "insensitive" } },
+          { originalFileName: { contains: input.search, mode: "insensitive" } },
+        ];
+      } else if (input.titlePrefix) {
+        where.title = { startsWith: input.titlePrefix };
+      }
       if (input.materialType) where.materialType = input.materialType;
       if (input.experienceSource) where.experienceSource = input.experienceSource;
+      if (input.atomPipelineStatus) where.atomPipelineStatus = input.atomPipelineStatus;
+      if (input.qaPipelineStatus) where.qaPipelineStatus = input.qaPipelineStatus;
 
       const [items, total] = await Promise.all([
         ctx.prisma.raw.findMany({
@@ -29,7 +42,23 @@ export const rawRouter = router({
           skip: (input.page - 1) * input.pageSize,
           take: input.pageSize,
           orderBy: { createdAt: "desc" },
-          include: { _count: { select: { atoms: true, qaPairs: true } } },
+          select: {
+            id: true,
+            originalFileName: true,
+            title: true,
+            format: true,
+            materialType: true,
+            experienceSource: true,
+            exposureLevel: true,
+            conversionStatus: true,
+            processingMode: true,
+            atomPipelineStatus: true,
+            qaPipelineStatus: true,
+            atomCount: true,
+            qaCount: true,
+            createdAt: true,
+            updatedAt: true,
+          },
         }),
         ctx.prisma.raw.count({ where }),
       ]);

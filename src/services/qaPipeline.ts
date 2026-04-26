@@ -1,7 +1,10 @@
 import { prisma } from '@/lib/prisma';
+import { normalizeToMarkdown } from '@/services/pipelineService';
 import { splitIntoSections, generateQAFromSection } from '@/services/qaService';
-import { generateEmbeddingBatch } from '@/services/embeddingService';
-import { upsertVectors } from '@/services/vectorStore';
+import { generateEmbedding } from '@/services/embeddingService';
+import { upsertVectors, VectorPoint } from '@/services/vectorStore';
+import fs from 'fs';
+import path from 'path';
 
 export interface QAPipelineInput {
   rawId: string;
@@ -10,9 +13,8 @@ export interface QAPipelineInput {
 
 export interface QAPipelineResult {
   qaCount: number;
-  skippedDuplicates: number;
-  qualityWarnings: number;
-  sectionCount: number;
+  vectorizedCount: number;
+  sectionsProcessed: number;
 }
 
 async function updateQAProgress(
@@ -28,7 +30,7 @@ async function updateQAProgress(
       qaPipelineStatus: stepName,
       qaPipelineProgress: {
         currentStep,
-        totalSteps: 5,
+        totalSteps: 4,
         stepName,
         processed,
         total,
@@ -43,133 +45,100 @@ export async function runQAPipeline(input: QAPipelineInput): Promise<QAPipelineR
 
   let result: QAPipelineResult = {
     qaCount: 0,
-    skippedDuplicates: 0,
-    qualityWarnings: 0,
-    sectionCount: 0,
+    vectorizedCount: 0,
+    sectionsProcessed: 0,
   };
 
   try {
-    // ═══ Step 1：Markdown → 段落切分 ═══
-    const markdown = raw.markdownContent;
+    // ═══ Step 1：Markdown 解析 → 段落分组 ═══
+    await updateQAProgress(rawId, 1, 'parsing', 0, 1);
+    let markdown = raw.markdownContent;
     if (!markdown) {
-      throw new Error('Raw has no markdown content');
+      const filePath = path.join(process.cwd(), 'uploads', raw.originalFileName || '');
+      const buffer = fs.existsSync(filePath)
+        ? fs.readFileSync(filePath)
+        : Buffer.from('', 'utf-8');
+      markdown = await normalizeToMarkdown(buffer, raw.format);
     }
-    await updateQAProgress(rawId, 1, 'splitting', 0, 1);
     const sections = splitIntoSections(markdown);
-    result.sectionCount = sections.length;
-    await updateQAProgress(rawId, 1, 'splitting', 1, 1);
+    result.sectionsProcessed = sections.length;
+    await updateQAProgress(rawId, 1, 'parsing', 1, 1);
 
-    // ═══ Step 2：逐个段落生成 QA 对 ═══
+    // ═══ Step 2：LLM 结构化 QA 提取 ═══
     await updateQAProgress(rawId, 2, 'generating', 0, sections.length);
-    const materialType = raw.materialType || 'GENERAL';
-    interface SectionQA { sectionIndex: number; qas: any[] }
-    const allGenerated: SectionQA[] = [];
+    interface QAPairWithMeta {
+      question: string;
+      answer: string;
+      tags: string[];
+      scenarios: string;
+      questionKeywords: string[];
+      difficulty: string;
+    }
+    const allPairs: QAPairWithMeta[] = [];
     for (let i = 0; i < sections.length; i++) {
-      const qas = await generateQAFromSection(sections[i], materialType);
-      allGenerated.push({ sectionIndex: i, qas });
+      const pairs = await generateQAFromSection(sections[i], raw.materialType);
+      allPairs.push(...pairs);
       await updateQAProgress(rawId, 2, 'generating', i + 1, sections.length);
     }
 
-    // 展平所有 QA 对
-    const flatQAs = allGenerated.flatMap(sq => sq.qas);
-
-    // ═══ Step 3：校验 ═══
-    await updateQAProgress(rawId, 3, 'validating', 0, flatQAs.length);
-    interface ValidQA { qa: any; hasWarning: boolean }
-    const validQAs: ValidQA[] = [];
-    for (let i = 0; i < flatQAs.length; i++) {
-      const qa = flatQAs[i];
-      let hasWarning = false;
-      if (!qa.question || !qa.answer) {
-        result.qualityWarnings++;
-        hasWarning = true;
-        continue;
-      }
-      if ((qa.answer as string).length < 50) {
-        result.qualityWarnings++;
-        hasWarning = true;
-      }
-      if (!qa.difficulty) {
-        qa.difficulty = 'BEGINNER';
-        result.qualityWarnings++;
-        hasWarning = true;
-      }
-      validQAs.push({ qa, hasWarning });
-      await updateQAProgress(rawId, 3, 'validating', i + 1, flatQAs.length);
+    // ═══ Step 3：Qwen Embedding 向量化 ═══
+    await updateQAProgress(rawId, 3, 'embedding', 0, allPairs.length);
+    const embeddings: number[][] = [];
+    for (let i = 0; i < allPairs.length; i++) {
+      const pair = allPairs[i];
+      const embeddingInput = `${pair.question} ${(pair.questionKeywords || []).join(' ')}`;
+      const emb = await generateEmbedding(embeddingInput);
+      embeddings.push(emb.vector);
+      await updateQAProgress(rawId, 3, 'embedding', i + 1, allPairs.length);
     }
 
-    // ═══ Step 4：去重 ═══
-    await updateQAProgress(rawId, 4, 'deduping', 0, validQAs.length);
-    const dedupedQAs: typeof validQAs = [];
-    for (let i = 0; i < validQAs.length; i++) {
-      const item = validQAs[i];
-      const dupCheck = await prisma.qAPair.findFirst({
-        where: { projectId, question: item.qa.question },
-      });
-      if (dupCheck) {
-        result.skippedDuplicates++;
-      } else {
-        dedupedQAs.push(item);
-      }
-      await updateQAProgress(rawId, 4, 'deduping', i + 1, validQAs.length);
-    }
-
-    // ═══ Step 5：向量化 + 入库 ═══
-    await updateQAProgress(rawId, 5, 'saving', 0, dedupedQAs.length);
-
-    // 5a：收集所有 QA 的文本（用 answer 生成向量）
-    const textsForEmbedding = dedupedQAs.map(item => item.qa.answer);
-
-    // 5b：批量生成 embedding
-    const embeddings = textsForEmbedding.length > 0
-      ? await generateEmbeddingBatch(textsForEmbedding)
-      : [];
-
-    // 5c：同时写入 PostgreSQL + Qdrant
-    for (let i = 0; i < dedupedQAs.length; i++) {
-      const { qa } = dedupedQAs[i];
-      const saved = await prisma.qAPair.create({
+    // ═══ Step 4：写入 Prisma + Qdrant ═══
+    await updateQAProgress(rawId, 4, 'saving', 0, allPairs.length);
+    const vectorPoints: VectorPoint[] = [];
+    for (let i = 0; i < allPairs.length; i++) {
+      const pair = allPairs[i];
+      const created = await prisma.qAPair.create({
         data: {
-          question: qa.question,
-          answer: qa.answer,
+          question: pair.question,
+          answer: pair.answer,
           projectId,
           rawId,
-          tags: qa.tags || [],
-          difficulty: qa.difficulty,
-          scenarios: qa.scenarios ? [qa.scenarios] : [],
-          questionKeywords: qa.questionKeywords || [],
-          materialType: materialType as any,
+          tags: pair.tags || [],
+          scenarios: [pair.scenarios || ''],
+          questionKeywords: pair.questionKeywords || [],
+          difficulty: (pair.difficulty as any) || 'BEGINNER',
+          materialType: raw.materialType,
           status: 'DRAFT',
+          answerWordCount: pair.answer.length,
+          version: 1,
         },
       });
-
-      // 同步写入 Qdrant 向量库
-      if (embeddings[i]) {
-        await upsertVectors([
-          {
-            id: saved.id,
-            vector: embeddings[i].vector,
-            payload: {
-              question: qa.question,
-              answer: qa.answer,
-              projectId,
-              rawId,
-              tags: qa.tags || [],
-              difficulty: qa.difficulty || 'BEGINNER',
-            },
-          },
-        ]);
-      }
-
+      vectorPoints.push({
+        id: created.id,
+        vector: embeddings[i],
+        payload: {
+          question: pair.question,
+          answer: pair.answer.slice(0, 500),
+          projectId,
+          rawId,
+          tags: pair.tags,
+          difficulty: pair.difficulty,
+        },
+      });
       result.qaCount++;
-      await updateQAProgress(rawId, 5, 'saving', i + 1, dedupedQAs.length);
+      await updateQAProgress(rawId, 4, 'saving', i + 1, allPairs.length);
     }
 
-    // 完成
+    if (vectorPoints.length > 0) {
+      await upsertVectors(vectorPoints);
+      result.vectorizedCount = vectorPoints.length;
+    }
+
     await prisma.raw.update({
       where: { id: rawId },
       data: {
         qaPipelineStatus: 'done',
+        markdownContent: markdown,
         qaCount: result.qaCount,
       },
     });
