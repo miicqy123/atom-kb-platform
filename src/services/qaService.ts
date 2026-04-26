@@ -1,6 +1,4 @@
 // src/services/qaService.ts
-import OpenAI from 'openai';
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export interface QAPairResult {
   question: string;
@@ -43,15 +41,13 @@ ${markdown.slice(0, 6000)}
 
 质量红线：禁止编造数据；无案例时标注[材料未提供案例，此处为逻辑推演]；答案必须含踩坑预警。`;
 
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    messages: [{ role: 'user', content: prompt }],
-    response_format: { type: 'json_object' },
+  const { callLLM } = await import('@/server/services/modelGateway');
+  const result = await callLLM('qa_generation', '', prompt, {
+    maxTokens: 8000,
     temperature: 0.3,
-    max_tokens: 8000,
   });
 
-  const content = response.choices[0].message.content || '{"pairs":[]}';
+  const content = result.content;
   const parsed = JSON.parse(content);
   return Array.isArray(parsed) ? parsed : (parsed.pairs || parsed.qa_pairs || []);
 }

@@ -10,6 +10,8 @@ import { trpc } from "@/lib/trpc";
 import { useProjectStore } from "@/stores/projectStore";
 import { CATEGORY_LABEL_MAP, SUBCATEGORY_LABEL_MAP } from "@/lib/categoryMaps";
 import { Play, CheckCircle, Circle, Loader2, ChevronDown, ChevronRight, Scissors, Merge, Tag, X, ChevronLeft } from "lucide-react";
+import { ModeSelector, type ProcessingMode } from '@/components/workbench/ModeSelector';
+import { ProcessingProgress, type PipelineStatus } from '@/components/workbench/ProcessingProgress';
 
 /* ── 30 维度 ── */
 const DIMENSIONS = [
@@ -91,17 +93,73 @@ function WorkbenchContent() {
     { ids: rawIdList },
     { enabled: isMultiMode }
   );
+  const utils = trpc.useUtils();
 
   /* ── 状态 ── */
   const [track, setTrack] = useState<"A" | "B">("A");
   const [station, setStation] = useState(2);
   const [selectedChunk, setSelectedChunk] = useState(0);
   const [activeRawIndex, setActiveRawIndex] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
   const currentRawData = isMultiMode ? (multiRawData ? multiRawData[activeRawIndex] : undefined) : rawData;
   const markdownPreview = currentRawData?.markdownContent || (rawIdList.length > 0 ? "加载中..." : "请从 Raw 素材管理页面选择素材进入加工");
 
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [isChunking, setIsChunking] = useState(false);
+
+  // ━━━ P6 新增：模式选择 + 加工状态 ━━━
+  const [selectedMode, setSelectedMode] = useState<ProcessingMode | null>(null);
+  const [atomPipeStatus, setAtomPipeStatus] = useState<PipelineStatus>('idle');
+  const [qaPipeStatus, setQaPipeStatus] = useState<PipelineStatus>('idle');
+  const [processResult, setProcessResult] = useState<{ atomCount: number; qaCount: number } | null>(null);
+  const [processError, setProcessError] = useState<string | null>(null);
+
+  const updateMutation = trpc.raw.update.useMutation({
+    onSuccess: () => {
+      toast({ title: "保存成功", description: "Markdown 内容已更新" });
+      setIsEditing(false);
+      utils.raw.getById.invalidate({ id: rawIdList[0] });
+      utils.raw.getByIds.invalidate({ ids: rawIdList });
+    },
+    onError: (e) => {
+      toast({ title: "保存失败", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const processWithMode = trpc.pipeline.processWithMode.useMutation({
+    onSuccess: (data) => {
+      setProcessResult({ atomCount: data.atomCount, qaCount: data.qaCount });
+      if (data.mode === 'ATOM_ONLY') {
+        setAtomPipeStatus('done');
+      } else if (data.mode === 'QA_ONLY') {
+        setQaPipeStatus('done');
+      } else {
+        setAtomPipeStatus('done');
+        setQaPipeStatus('done');
+      }
+      toast({ title: '加工完成', description: `原子块 ${data.atomCount} 个，QA 对 ${data.qaCount} 个` });
+    },
+    onError: (err) => {
+      setProcessError(err.message);
+      setAtomPipeStatus('error');
+      setQaPipeStatus('error');
+      toast({ title: '加工失败', description: err.message });
+    },
+  });
+
+  function handleStartProcessing() {
+    if (!selectedMode || !rawIdList[0] || !currentProject?.id) return;
+    setProcessError(null);
+    setProcessResult(null);
+    if (selectedMode === 'ATOM_ONLY' || selectedMode === 'DUAL') setAtomPipeStatus('running');
+    if (selectedMode === 'QA_ONLY' || selectedMode === 'DUAL') setQaPipeStatus('running');
+    processWithMode.mutate({
+      rawId: rawIdList[0],
+      projectId: currentProject.id,
+      mode: selectedMode,
+    });
+  }
 
   function doChunking() {
     if (!markdownPreview || markdownPreview.length < 10) {
@@ -162,6 +220,19 @@ function WorkbenchContent() {
 
   const currentChunk = chunks[selectedChunk];
 
+  const handleEdit = () => {
+    setEditContent(markdownPreview);
+    setIsEditing(true);
+  };
+
+  const handleSave = () => {
+    if (!rawIdList[0]) return;
+    updateMutation.mutate({
+      id: rawIdList[0],
+      data: { markdownContent: editContent },
+    });
+  };
+
   const stationIcon = (s: number) => {
     if (s < station) return <CheckCircle className="h-4 w-4 text-green-500" />;
     if (s === station) return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
@@ -182,15 +253,16 @@ function WorkbenchContent() {
           </div>
         </div>
         <div className="ml-auto flex gap-2">
-          <Button variant={track==="A" ? "default" : "outline"} size="sm" onClick={() => setTrack("A")}
+          <Button variant={track==="A" ? "default" : "outline"} size="sm" onClick={() => { setTrack("A"); setSelectedMode('ATOM_ONLY'); }}
             className={`text-xs ${track==="A" ? "bg-blue-600 text-white" : ""}`}>
             Track A 原子化 ▶
           </Button>
-          <Button variant={track==="B" ? "default" : "outline"} size="sm" onClick={() => setTrack("B")}
+          <Button variant={track==="B" ? "default" : "outline"} size="sm" onClick={() => { setTrack("B"); setSelectedMode('QA_ONLY'); }}
             className={`text-xs ${track==="B" ? "bg-purple-600 text-white" : ""}`}>
             Track B QA对 ▶
           </Button>
-          <Button size="sm" className="text-xs bg-brand text-white">
+          <Button size="sm" onClick={() => { setSelectedMode('DUAL'); }}
+            className="text-xs bg-brand text-white">
             双轨并行 ▶▶
           </Button>
         </div>
@@ -238,14 +310,41 @@ function WorkbenchContent() {
       {/* 主区域 */}
       <div className="flex flex-1 overflow-hidden">
         {/* ══════ 左侧：Markdown 预览 ══════ */}
-        <div className="w-[380px] flex-shrink-0 border-r overflow-auto">
-          <div className="px-4 py-2 bg-gray-50 border-b text-xs font-semibold text-gray-600">
-            Markdown 预览
+        <div className="w-[380px] flex-shrink-0 border-r overflow-auto flex flex-col">
+          <div className="px-4 py-2 bg-gray-50 border-b text-xs font-semibold text-gray-600 flex items-center justify-between">
+            <span>Markdown 预览</span>
+            {rawIdList.length > 0 && markdownPreview !== "加载中..." && markdownPreview !== "请从 Raw 素材管理页面选择素材进入加工" && (
+              isEditing ? (
+                <div className="flex gap-1">
+                  <button onClick={() => setIsEditing(false)}
+                    className="px-2 py-0.5 rounded text-[10px] text-gray-500 hover:bg-gray-200 transition">
+                    取消
+                  </button>
+                  <button onClick={handleSave} disabled={updateMutation.isPending}
+                    className="px-2 py-0.5 rounded text-[10px] bg-brand text-white hover:opacity-90 transition disabled:opacity-50">
+                    {updateMutation.isPending ? "保存中..." : "保存"}
+                  </button>
+                </div>
+              ) : (
+                <button onClick={handleEdit}
+                  className="px-2 py-0.5 rounded text-[10px] text-gray-500 hover:bg-gray-200 transition">
+                  编辑
+                </button>
+              )
+            )}
           </div>
-          <div className="p-4">
-            <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
-              {markdownPreview}
-            </pre>
+          <div className="flex-1 p-4 overflow-auto">
+            {isEditing ? (
+              <textarea
+                value={editContent}
+                onChange={e => setEditContent(e.target.value)}
+                className="w-full h-full min-h-[300px] font-mono text-sm p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand resize-none"
+              />
+            ) : (
+              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
+                {markdownPreview}
+              </pre>
+            )}
           </div>
         </div>
 
@@ -536,14 +635,51 @@ function WorkbenchContent() {
             </div>
           )}
 
-          {/* 站1 */}
+          {/* 站1：文档解析 + 模式选择 */}
           {station === 1 && (
-            <div className="flex items-center justify-center h-full">
+            <div className="p-6 space-y-6">
               <div className="text-center space-y-3">
                 <div className="text-4xl">📄</div>
-                <div className="text-sm text-gray-600">文档已解析完成</div>
-                <Button onClick={() => setStation(2)} className="bg-brand text-white">进入站② 智能切块 ▶</Button>
+                <div className="text-sm text-gray-600">文档已解析完成，请选择加工模式</div>
               </div>
+
+              <ModeSelector
+                selected={selectedMode}
+                onSelect={(mode) => setSelectedMode(mode)}
+                disabled={processWithMode.isPending}
+              />
+
+              {selectedMode && !processResult && (
+                <button
+                  onClick={handleStartProcessing}
+                  disabled={processWithMode.isPending}
+                  className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm text-white font-medium hover:bg-blue-700 disabled:opacity-50 transition"
+                >
+                  {processWithMode.isPending ? '加工中，请稍候...' : `开始「${selectedMode === 'ATOM_ONLY' ? '原子化入库' : selectedMode === 'QA_ONLY' ? 'QA向量入库' : '全量加工'}」`}
+                </button>
+              )}
+
+              {(atomPipeStatus !== 'idle' || qaPipeStatus !== 'idle') && selectedMode && (
+                <ProcessingProgress
+                  mode={selectedMode}
+                  atomStatus={atomPipeStatus}
+                  qaStatus={qaPipeStatus}
+                  atomCount={processResult?.atomCount ?? 0}
+                  qaCount={processResult?.qaCount ?? 0}
+                  error={processError}
+                />
+              )}
+
+              {processResult && (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setStation(2)}
+                    className="flex-1 rounded-xl bg-brand px-4 py-2.5 text-sm text-white hover:opacity-90"
+                  >
+                    查看切块详情 → 站② ▶
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

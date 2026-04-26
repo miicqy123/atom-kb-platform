@@ -120,6 +120,9 @@ model Raw {
   exposureLevel      ExposureLevel     @default(INTERNAL)
   fileSize           Int?
   metadata           Json?
+  processingMode     ProcessingMode?
+  atomCount          Int?
+  qaCount            Int?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   atoms              Atom[]
@@ -822,6 +825,18 @@ enum ConversionStatus {
   CONVERTING
   CONVERTED
   FAILED
+  ATOM_PROCESSING   // 原子化管线处理中
+  QA_PROCESSING     // QA 向量管线处理中
+  DUAL_PROCESSING   // 双管线并行处理中
+  ATOM_DONE         // 已原子化入库
+  QA_DONE           // 已向量入库
+  DUAL_DONE         // 已分别入 2 个库
+}
+
+enum ProcessingMode {
+  ATOM_ONLY
+  QA_ONLY
+  DUAL
 }
 
 enum AssetStatus {

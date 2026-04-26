@@ -201,7 +201,7 @@ export default function RawMaterialsPage() {
           </select>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
             <option value="">全部状态</option>
-            {["PENDING","CONVERTING","CONVERTED","FAILED"].map(s => <option key={s} value={s}>{s}</option>)}
+            {[{v:"PENDING",l:"待处理"},{v:"CONVERTING",l:"转换中"},{v:"CONVERTED",l:"已转换"},{v:"FAILED",l:"失败"},{v:"ATOM_PROCESSING",l:"原子化中"},{v:"QA_PROCESSING",l:"QA生成中"},{v:"DUAL_PROCESSING",l:"双轨加工中"},{v:"ATOM_DONE",l:"已原子化"},{v:"QA_DONE",l:"已向量化"},{v:"DUAL_DONE",l:"已入2库"}].map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
           </select>
           <select value={expSourceFilter} onChange={e => setExpSourceFilter(e.target.value)} className="h-9 rounded-lg border px-3 text-sm">
             <option value="">全部经验源</option>
@@ -289,6 +289,12 @@ export default function RawMaterialsPage() {
                         </div>
                       </div>
                       <StatusBadge status={r.conversionStatus} />
+                      {(r._count?.atoms > 0 || r._count?.qaPairs > 0) && (
+                        <div className="flex items-center gap-2 text-[10px] text-gray-400 shrink-0">
+                          {r._count?.atoms > 0 && <span>🧩 {r._count.atoms}</span>}
+                          {r._count?.qaPairs > 0 && <span>🔗 {r._count.qaPairs}</span>}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -327,14 +333,22 @@ export default function RawMaterialsPage() {
               ) : (
                 /* ====== 看板视图（按转换状态分组） ====== */
                 <div className="flex gap-4 p-4 h-full overflow-x-auto">
-                  {["PENDING", "CONVERTING", "CONVERTED", "FAILED"].map(status => {
+                  {["PENDING", "CONVERTING", "CONVERTED", "ATOM_PROCESSING", "QA_PROCESSING", "DUAL_PROCESSING", "ATOM_DONE", "QA_DONE", "DUAL_DONE", "FAILED"].map(status => {
                     const statusItems = items.filter((r: any) => r.conversionStatus === status);
                     const statusLabels: Record<string, string> = {
-                      PENDING: "待处理", CONVERTING: "转换中", CONVERTED: "已转换", FAILED: "失败"
+                      PENDING: "待处理", CONVERTING: "转换中", CONVERTED: "已转换",
+                      ATOM_PROCESSING: "原子化中", QA_PROCESSING: "QA生成中", DUAL_PROCESSING: "双轨加工中",
+                      ATOM_DONE: "已原子化", QA_DONE: "已向量化", DUAL_DONE: "已入2库",
+                      FAILED: "失败"
                     };
                     const statusColors: Record<string, string> = {
                       PENDING: "bg-gray-100 text-gray-600", CONVERTING: "bg-blue-100 text-blue-600",
-                      CONVERTED: "bg-green-100 text-green-600", FAILED: "bg-red-100 text-red-600"
+                      CONVERTED: "bg-green-100 text-green-600",
+                      ATOM_PROCESSING: "bg-blue-100 text-blue-600", QA_PROCESSING: "bg-purple-100 text-purple-600",
+                      DUAL_PROCESSING: "bg-indigo-100 text-indigo-600",
+                      ATOM_DONE: "bg-blue-100 text-blue-600", QA_DONE: "bg-purple-100 text-purple-600",
+                      DUAL_DONE: "bg-green-100 text-green-600",
+                      FAILED: "bg-red-100 text-red-600"
                     };
                     return (
                       <div key={status} className="flex-shrink-0 w-56 flex flex-col">
