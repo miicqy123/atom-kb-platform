@@ -4,7 +4,7 @@ import { router, withPermission, protectedProcedure } from "../trpc";
 export const qaPairRouter = router({
   list: withPermission("knowledge", "read")
     .input(z.object({
-      projectId: z.string(), difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'PROFESSIONAL']).optional(), materialType: z.string().optional(),
+      projectId: z.string(), difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'EXPERT']).optional(), materialType: z.string().optional(),
       status: z.string().optional(), search: z.string().optional(),
       page: z.number().default(1), pageSize: z.number().default(20),
     }))
@@ -27,7 +27,7 @@ export const qaPairRouter = router({
   create: withPermission("knowledge", "write")
     .input(z.object({
       question: z.string(), answer: z.string(), projectId: z.string(), rawId: z.string().optional(),
-      tags: z.array(z.string()), difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'PROFESSIONAL']), scenarios: z.array(z.string()),
+      tags: z.array(z.string()), difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'EXPERT']), scenarios: z.array(z.string()),
       questionKeywords: z.array(z.string()), materialType: z.string(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -41,7 +41,7 @@ export const qaPairRouter = router({
       question: z.string().optional(),
       answer: z.string().optional(),
       tags: z.array(z.string()).optional(),
-      difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'PROFESSIONAL']).optional(),
+      difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'EXPERT']).optional(),
       scenarios: z.array(z.string()).optional(),
       questionKeywords: z.array(z.string()).optional(),
       materialType: z.string().optional(),
@@ -89,7 +89,7 @@ export const qaPairRouter = router({
       query: z.string(),
       projectId: z.string(),
       limit: z.number().default(10),
-      difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'PROFESSIONAL']).optional(),
+      difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'EXPERT']).optional(),
     }))
     .query(async ({ input, ctx }) => {
       const items = await ctx.prisma.qAPair.findMany({

@@ -16,7 +16,7 @@ interface UploadDialogProps {
 export default function UploadDialog({ open, onOpenChange, projectId: propProjectId }: UploadDialogProps) {
   const [title, setTitle] = useState('');
   const [materialType, setMaterialType] = useState<'THEORY' | 'CASE_STUDY' | 'METHODOLOGY' | 'FAQ' | 'SCRIPT' | 'REGULATION' | 'PRODUCT_DOC' | 'TRAINING_MATERIAL' | 'MEETING_RECORD' | 'CUSTOMER_VOICE' | 'INDUSTRY_REPORT' | 'COMPETITOR_ANALYSIS' | 'INTERNAL_WIKI' | 'OTHER'>('THEORY');
-  const [experienceSource, setExperienceSource] = useState<'E1_COMPANY' | 'E2_INDUSTRY' | 'E3_CROSS_INDUSTRY'>('E1_COMPANY');
+  const [experienceSource, setExperienceSource] = useState<'E1_COMPANY' | 'E2_INDUSTRY' | 'E3_BOOK'>('E1_COMPANY');
   const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -218,7 +218,7 @@ export default function UploadDialog({ open, onOpenChange, projectId: propProjec
             >
               <option value="E1_COMPANY">公司内部经验</option>
               <option value="E2_INDUSTRY">行业经验</option>
-              <option value="E3_CROSS_INDUSTRY">跨行业经验</option>
+              <option value="E3_BOOK">书本经验</option>
             </select>
           </div>
 

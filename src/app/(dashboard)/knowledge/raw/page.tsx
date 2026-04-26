@@ -36,7 +36,7 @@ const MATERIAL_TYPE_LABELS: Record<string, string> = {
 };
 
 const EXP_SOURCE_LABELS: Record<string, string> = {
-  E1_COMPANY: "E1 企业", E2_INDUSTRY: "E2 行业", E3_CROSS_INDUSTRY: "E3 跨行业",
+  E1_COMPANY: "E1 企业", E2_INDUSTRY: "E2 行业", E3_BOOK: "E3 书本",
 };
 
 function formatFileSize(bytes: number | null | undefined): string {
@@ -207,7 +207,7 @@ export default function RawMaterialsPage() {
             <option value="">全部经验源</option>
             <option value="E1_COMPANY">E1 企业</option>
             <option value="E2_INDUSTRY">E2 行业</option>
-            <option value="E3_CROSS_INDUSTRY">E3 跨行业</option>
+            <option value="E3_BOOK">E3 书本</option>
           </select>
         </div>
 

@@ -121,9 +121,13 @@ model Raw {
   fileSize           Int?
   metadata           Json?
   processingMode     ProcessingMode?
-  atomCount          Int?
-  qaCount            Int?
-  createdAt          DateTime          @default(now())
+  atomCount            Int?
+  qaCount              Int?
+  atomPipelineStatus   String?           @default("idle")
+  qaPipelineStatus     String?           @default("idle")
+  atomPipelineProgress Json?
+  qaPipelineProgress   Json?
+  createdAt            DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   atoms              Atom[]
   processedChunks    ProcessedChunk[]
@@ -817,7 +821,7 @@ enum MaterialType {
 enum ExperienceSource {
   E1_COMPANY
   E2_INDUSTRY
-  E3_CROSS_INDUSTRY
+  E3_BOOK
 }
 
 enum ConversionStatus {
@@ -917,7 +921,7 @@ enum Urgency {
 enum QADifficulty {
   BEGINNER
   INTERMEDIATE
-  PROFESSIONAL
+  EXPERT
 }
 
 // 内容类别（第二层分类）

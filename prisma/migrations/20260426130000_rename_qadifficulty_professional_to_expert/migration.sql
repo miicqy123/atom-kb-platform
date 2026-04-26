@@ -1,0 +1,2 @@
+-- AlterEnum: rename PROFESSIONAL to EXPERT in QADifficulty
+ALTER TYPE "QADifficulty" RENAME VALUE 'PROFESSIONAL' TO 'EXPERT';

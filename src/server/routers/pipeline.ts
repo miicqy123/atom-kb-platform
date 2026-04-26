@@ -110,6 +110,23 @@ export const pipelineRouter = router({
       return { success: true, qaPairsCreated: created.length };
     }),
 
+  // 获取 Raw 的管线进度
+  getProgress: protectedProcedure
+    .input(z.object({ rawId: z.string() }))
+    .query(async ({ input }) => {
+      return prisma.raw.findUniqueOrThrow({
+        where: { id: input.rawId },
+        select: {
+          atomPipelineStatus: true,
+          atomPipelineProgress: true,
+          qaPipelineStatus: true,
+          qaPipelineProgress: true,
+          atomCount: true,
+          qaCount: true,
+        },
+      });
+    }),
+
   // 按加工模式处理（ATOM_ONLY / QA_ONLY / DUAL）
   processWithMode: permissionProcedure('raw:process')
     .input(z.object({

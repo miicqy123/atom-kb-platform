@@ -25,7 +25,7 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
   const [content, setContent] = useState('');
   const [layer, setLayer] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [granularity, setGranularity] = useState<'ATOM' | 'MODULE' | 'PACK'>('ATOM');
-  const [experienceSource, setExperienceSource] = useState<'E1_COMPANY' | 'E2_INDUSTRY' | 'E3_CROSS_INDUSTRY'>('E1_COMPANY');
+  const [experienceSource, setExperienceSource] = useState<'E1_COMPANY' | 'E2_INDUSTRY' | 'E3_BOOK'>('E1_COMPANY');
   const [exposureLevel, setExposureLevel] = useState<'INTERNAL' | 'EXTERNAL' | 'NEEDS_APPROVAL' | 'STRICTLY_FORBIDDEN'>('INTERNAL');
   const [status, setStatus] = useState<'DRAFT' | 'TESTING' | 'ACTIVE' | 'ARCHIVED'>('DRAFT');
   const [dimensions, setDimensions] = useState<number[]>([]);
@@ -255,12 +255,12 @@ export default function AtomDialog({ open, onOpenChange, projectId, atom, onComp
               <select
                 id="experienceSource"
                 value={experienceSource}
-                onChange={(e) => setExperienceSource(e.target.value as 'E1_COMPANY' | 'E2_INDUSTRY' | 'E3_CROSS_INDUSTRY')}
+                onChange={(e) => setExperienceSource(e.target.value as 'E1_COMPANY' | 'E2_INDUSTRY' | 'E3_BOOK')}
                 className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand"
               >
                 <option value="E1_COMPANY">公司经验</option>
                 <option value="E2_INDUSTRY">行业经验</option>
-                <option value="E3_CROSS_INDUSTRY">跨行业经验</option>
+                <option value="E3_BOOK">书本经验</option>
               </select>
             </div>
 

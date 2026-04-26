@@ -11,7 +11,9 @@ import { useProjectStore } from "@/stores/projectStore";
 import { CATEGORY_LABEL_MAP, SUBCATEGORY_LABEL_MAP } from "@/lib/categoryMaps";
 import { Play, CheckCircle, Circle, Loader2, ChevronDown, ChevronRight, Scissors, Merge, Tag, X, ChevronLeft } from "lucide-react";
 import { ModeSelector, type ProcessingMode } from '@/components/workbench/ModeSelector';
-import { ProcessingProgress, type PipelineStatus } from '@/components/workbench/ProcessingProgress';
+import { AtomPipelinePanel } from '@/components/workbench/AtomPipelinePanel';
+import { QAPipelinePanel } from '@/components/workbench/QAPipelinePanel';
+import { DualPipelinePanel } from '@/components/workbench/DualPipelinePanel';
 
 /* ── 30 维度 ── */
 const DIMENSIONS = [
@@ -110,8 +112,8 @@ function WorkbenchContent() {
 
   // ━━━ P6 新增：模式选择 + 加工状态 ━━━
   const [selectedMode, setSelectedMode] = useState<ProcessingMode | null>(null);
-  const [atomPipeStatus, setAtomPipeStatus] = useState<PipelineStatus>('idle');
-  const [qaPipeStatus, setQaPipeStatus] = useState<PipelineStatus>('idle');
+  const [atomPipeStatus, setAtomPipeStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [qaPipeStatus, setQaPipeStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [processResult, setProcessResult] = useState<{ atomCount: number; qaCount: number } | null>(null);
   const [processError, setProcessError] = useState<string | null>(null);
 
@@ -274,32 +276,26 @@ function WorkbenchContent() {
         </div>
       )}
 
-      {/* 进度条 - 根据模式动态过滤 */}
-      <div className="px-6 py-2 border-b bg-gray-50/50">
-        <div className="flex items-center gap-1">
-          {STATIONS
-            .filter((s) => {
-              if (!selectedMode) return true;
-              if ([1, 5, 6].includes(s.id)) return true;
-              if ([2, 3].includes(s.id)) return selectedMode === 'ATOM_ONLY' || selectedMode === 'DUAL';
-              if (s.id === 4) return selectedMode === 'QA_ONLY' || selectedMode === 'DUAL';
-              return true;
-            })
-            .map((s, i, filtered) => (
-              <div key={s.id} className="flex items-center">
-                <button onClick={() => setStation(s.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition ${
-                    station === s.id ? "bg-white shadow-sm border font-medium text-blue-700" :
-                    s.id < station ? "text-green-600" : "text-gray-400"
-                  }`}>
-                  {stationIcon(s.id)}
-                  <span>站{s.id} {s.name}</span>
-                </button>
-                {i < filtered.length - 1 && <span className="text-gray-300 mx-1">→</span>}
-              </div>
-            ))}
+      {/* 模式选择后不再显示顶部 station 进度条，由卡片内嵌 StepIndicator 替代 */}
+      {!selectedMode && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-xl overflow-x-auto">
+          {STATIONS.map((s, i) => (
+            <div key={s.id} className="flex items-center">
+              <button
+                onClick={() => setStation(s.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition ${
+                  station === s.id ? 'bg-white shadow-sm border font-medium text-blue-700' :
+                  s.id < station ? 'text-green-600' : 'text-gray-400'
+                }`}
+              >
+                {stationIcon(s.id)}
+                <span>站{s.id} {s.name}</span>
+              </button>
+              {i < STATIONS.length - 1 && <span className="mx-1 text-gray-300">→</span>}
+            </div>
+          ))}
         </div>
-      </div>
+      )}
 
       {/* 主区域 */}
       <div className="flex flex-1 overflow-hidden">
@@ -368,15 +364,27 @@ function WorkbenchContent() {
                 </button>
               )}
 
-              {(atomPipeStatus !== 'idle' || qaPipeStatus !== 'idle') && selectedMode && (
-                <ProcessingProgress
-                  mode={selectedMode}
-                  atomStatus={atomPipeStatus}
-                  qaStatus={qaPipeStatus}
-                  atomCount={processResult?.atomCount ?? 0}
-                  qaCount={processResult?.qaCount ?? 0}
-                  error={processError}
-                />
+              {(atomPipeStatus !== 'idle' || qaPipeStatus !== 'idle') && selectedMode && rawIdList[0] && (
+                <div className="mt-4">
+                  {selectedMode === 'ATOM_ONLY' && (
+                    <AtomPipelinePanel
+                      rawId={rawIdList[0]}
+                      isRunning={atomPipeStatus === 'running'}
+                    />
+                  )}
+                  {selectedMode === 'QA_ONLY' && (
+                    <QAPipelinePanel
+                      rawId={rawIdList[0]}
+                      isRunning={qaPipeStatus === 'running'}
+                    />
+                  )}
+                  {selectedMode === 'DUAL' && (
+                    <DualPipelinePanel
+                      rawId={rawIdList[0]}
+                      isRunning={atomPipeStatus === 'running' || qaPipeStatus === 'running'}
+                    />
+                  )}
+                </div>
               )}
 
               {processResult && (

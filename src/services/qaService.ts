@@ -6,9 +6,71 @@ export interface QAPairResult {
   tags: string[];
   scenarios: string;
   questionKeywords: string[];
-  difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'PROFESSIONAL';
+  difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'EXPERT';
 }
 
+/**
+ * 按段落分组：按 ## 标题 或两个换行分割 markdown
+ */
+export function splitIntoSections(markdown: string): string[] {
+  const raw = markdown.split(/\n(?=#{1,3}\s)/);
+  const sections: string[] = [];
+  for (const section of raw) {
+    if (section.trim().length >= 100) {
+      sections.push(section.trim());
+    } else if (sections.length > 0) {
+      sections[sections.length - 1] += '\n\n' + section.trim();
+    }
+  }
+  return sections;
+}
+
+/**
+ * 对单个 section 调用 LLM 生成 QA 对（JSON Schema 约束）
+ */
+export async function generateQAFromSection(
+  section: string,
+  materialType: string
+): Promise<QAPairResult[]> {
+  const prompt = `你是企业知识库QA对生成专家。基于以下材料段落生成高质量问答对。
+
+材料类型：${materialType}
+材料内容：
+"""
+${section.slice(0, 4000)}
+"""
+
+严格按以下JSON数组格式返回：
+[
+  {
+    "question": "场景化自然语言问题",
+    "answer": "结构化答案（≥400字）：核心观点→机理解释→案例→实操建议→踩坑预警→适用边界→可复用公式",
+    "tags": ["标签1", "标签2"],
+    "scenarios": "适用场景描述",
+    "questionKeywords": ["关键词1", "关键词2", "关键词3"],
+    "difficulty": "BEGINNER 或 INTERMEDIATE 或 EXPERT"
+  }
+]
+
+每个段落生成 2-5 个 QA 对。质量红线：禁止编造数据。`;
+
+  const { callLLM } = await import('@/server/services/modelGateway');
+  const result = await callLLM('qa_generation', '', prompt, {
+    maxTokens: 6000,
+    temperature: 0.3,
+  });
+
+  try {
+    const parsed = JSON.parse(result.content);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * @deprecated 使用 splitIntoSections + generateQAFromSection 替代
+ */
 export async function generateQAPairs(
   markdown: string,
   materialType: string
@@ -35,7 +97,7 @@ ${markdown.slice(0, 6000)}
     "tags": ["标签1", "标签2", "标签3"],
     "scenarios": "主要适用场景+典型使用者+触发时机",
     "questionKeywords": ["关键词1","关键词2","关键词3","关键词4","关键词5"],
-    "difficulty": "BEGINNER或INTERMEDIATE或PROFESSIONAL"
+    "difficulty": "BEGINNER或INTERMEDIATE或EXPERT"
   }
 ]
 
