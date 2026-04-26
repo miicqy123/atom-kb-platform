@@ -70,7 +70,7 @@ export async function runQAPipeline(input: QAPipelineInput): Promise<QAPipelineR
       question: string;
       answer: string;
       tags: string[];
-      scenarios: string;
+      scenarios: string[];
       questionKeywords: string[];
       difficulty: string;
     }
@@ -104,7 +104,7 @@ export async function runQAPipeline(input: QAPipelineInput): Promise<QAPipelineR
           projectId,
           rawId,
           tags: pair.tags || [],
-          scenarios: [pair.scenarios || ''],
+          scenarios: pair.scenarios,
           questionKeywords: pair.questionKeywords || [],
           difficulty: (pair.difficulty as any) || 'BEGINNER',
           materialType: raw.materialType,

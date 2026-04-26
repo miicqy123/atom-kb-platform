@@ -1,53 +1,89 @@
-// src/services/qaService.ts
+// src/services/qaService.ts — Qwen RAG Dataset Builder Pro v7.1
+
+import { z } from 'zod';
 
 /** QA 生成可配置项 */
 export interface QAGenerationConfig {
-  /** LLM 模型名称，如 'qwen-turbo' / 'deepseek-chat' / 'gpt-4o-mini' */
   modelName?: string;
-  /** 自定义系统提示词 */
+  /** 自定义系统提示词，缺省使用 RAG Pro v7.1 标准 */
   systemPrompt?: string;
-  /** 自定义用户提示词模板，支持 {materialType} {content} {pairsPerSection} 占位符 */
+  /** 自定义用户提示词模板，支持 {materialType} {content} {targetCount} 占位符 */
   userPromptTemplate?: string;
-  /** 最大 token 数，默认 6000 */
   maxTokens?: number;
-  /** 温度，默认 0.3 */
   temperature?: number;
-  /** 每段落目标 QA 对数量范围，默认 '2-5' */
-  pairsPerSection?: string;
 }
 
-const DEFAULT_SYSTEM_PROMPT = '你是企业知识库QA对生成专家。严格按JSON数组格式返回结果，不要输出任何其他文字。';
+/** 单条 QA 对结果 */
+export interface QAPairResult {
+  question: string;
+  answer: string;
+  tags: string[];
+  scenarios: string[];
+  questionKeywords: string[];
+  difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'EXPERT';
+}
 
-const DEFAULT_USER_PROMPT_TEMPLATE = `基于以下材料段落生成高质量问答对。
+// ━━━ Zod Schema（用于运行时校验 LLM 输出）━━━
+const QAPairItemSchema = z.object({
+  question: z.string().min(1),
+  answer: z.string().min(1),
+  tags: z.array(z.string()).default([]),
+  scenarios: z.array(z.string()).default([]),
+  questionKeywords: z.array(z.string()).default([]),
+  difficulty: z.enum(['BEGINNER', 'INTERMEDIATE', 'EXPERT']).default('INTERMEDIATE'),
+});
+
+const QAPairsSchema = z.object({
+  qaPairs: z.array(QAPairItemSchema).min(1),
+});
+
+// ━━━ RAG Pro v7.1 结构化 Prompt（API 版）━━━
+const SYSTEM_PROMPT_RAG_V7 = `你是行业知识库RAG数据集构建专家。
+
+## 核心原则
+1. 所有QA必须严格基于输入材料，不得捏造数字、价格、案例、人物、效果。
+2. 如果材料没有案例，必须在答案中标注"材料未提供案例"。
+3. 问题必须是用户真实会搜索的场景化问题。
+4. 答案必须自足，不能出现"如上文所述""如前所述"等指向性表述。
+5. 不要在答案中输出思考过程、规划、或Markdown格式。
+
+## 答案7层结构
+每个答案应尽量包含以下层次（根据材料信息量灵活调整）：
+1. 核心观点 — 一句话总结
+2. 机理解释 — 为什么是这样
+3. 案例或材料依据 — 材料中的具体信息
+4. 实操建议 — 可执行的行动指南
+5. 常见误区 — 容易犯错的地方
+6. 边界与延伸 — 适用的前提和场景
+7. 反向思维/踩坑预警 — 如果做错了会怎样
+
+## 输出要求
+只输出JSON，不输出任何其他文字、代码块标记、Markdown。`;
+
+const USER_PROMPT_TEMPLATE_RAG_V7 = `基于以下材料生成高质量QA对。
 
 材料类型：{materialType}
+
 材料内容：
 """
 {content}
 """
 
-严格按以下JSON数组格式返回：
-[
-  {
-    "question": "场景化自然语言问题",
-    "answer": "结构化答案（≥400字）：核心观点→机理解释→案例→实操建议→踩坑预警→适用边界→可复用公式",
-    "tags": ["标签1", "标签2"],
-    "scenarios": "适用场景描述",
-    "questionKeywords": ["关键词1", "关键词2", "关键词3"],
-    "difficulty": "BEGINNER 或 INTERMEDIATE 或 EXPERT"
-  }
-]
+请生成 {targetCount} 个QA对。
 
-每个段落生成 {pairsPerSection} 个 QA 对。质量红线：禁止编造数据。`;
-
-export interface QAPairResult {
-  question: string;
-  answer: string;
-  tags: string[];
-  scenarios: string;
-  questionKeywords: string[];
-  difficulty: 'BEGINNER' | 'INTERMEDIATE' | 'EXPERT';
-}
+JSON结构：
+{{
+  "qaPairs": [
+    {{
+      "question": "用户真实会问的场景化问题",
+      "answer": "7层结构答案",
+      "tags": ["标签1", "标签2", "标签3"],
+      "scenarios": ["适用场景1", "适用场景2"],
+      "questionKeywords": ["关键词1", "关键词2", "关键词3"],
+      "difficulty": "BEGINNER 或 INTERMEDIATE 或 EXPERT"
+    }}
+  ]
+}}`;
 
 /**
  * 按段落分组：按 ## 标题 或两个换行分割 markdown
@@ -66,8 +102,38 @@ export function splitIntoSections(markdown: string): string[] {
 }
 
 /**
- * 对单个 section 调用 LLM 生成 QA 对（JSON Schema 约束）
- * @param config 可选配置，缺省使用内置默认提示词
+ * 从 LLM 返回文本中提取并解析 JSON
+ */
+function parseJSON(text: string): any {
+  // 移除 ```json 或 ``` 代码块标记
+  let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  // 尝试直接解析
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // 尝试找到第一个 { 到最后一个 }
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1));
+      } catch {}
+    }
+    // 尝试找到第一个 [ 到最后一个 ]
+    const arrStart = cleaned.indexOf('[');
+    const arrEnd = cleaned.lastIndexOf(']');
+    if (arrStart !== -1 && arrEnd > arrStart) {
+      try {
+        const arr = JSON.parse(cleaned.slice(arrStart, arrEnd + 1));
+        return { qaPairs: arr };
+      } catch {}
+    }
+    throw new Error(`无法解析 LLM 返回的 JSON。返回前200字符: ${cleaned.slice(0, 200)}`);
+  }
+}
+
+/**
+ * 对单个 section 调用 Qwen 生成 QA 对（RAG Pro v7.1 标准）
  */
 export async function generateQAFromSection(
   section: string,
@@ -76,17 +142,23 @@ export async function generateQAFromSection(
 ): Promise<QAPairResult[]> {
   const {
     modelName,
-    systemPrompt = DEFAULT_SYSTEM_PROMPT,
-    userPromptTemplate = DEFAULT_USER_PROMPT_TEMPLATE,
-    maxTokens = 6000,
-    temperature = 0.3,
-    pairsPerSection = '2-5',
+    systemPrompt = SYSTEM_PROMPT_RAG_V7,
+    userPromptTemplate = USER_PROMPT_TEMPLATE_RAG_V7,
+    maxTokens = 8000,
+    temperature = 0.1,
   } = config || {};
+
+  // 根据材料长度动态计算目标 QA 数量
+  const wordCount = section.length;
+  const targetCount =
+    wordCount < 300 ? 1 :
+    wordCount < 800 ? 2 :
+    wordCount < 2000 ? 3 : 5;
 
   const userPrompt = userPromptTemplate
     .replace('{materialType}', materialType)
-    .replace('{content}', section.slice(0, 4000))
-    .replace('{pairsPerSection}', pairsPerSection);
+    .replace('{content}', section.slice(0, 8000))
+    .replace('{targetCount}', String(targetCount));
 
   const { callLLM } = await import('@/server/services/modelGateway');
   const result = await callLLM(
@@ -100,12 +172,14 @@ export async function generateQAFromSection(
     }
   );
 
-  try {
-    const parsed = JSON.parse(result.content);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  // 解析 JSON
+  const parsed = parseJSON(result.content);
+  // 支持多种返回格式：{qaPairs: [...]} 或 直接数组
+  const items = Array.isArray(parsed) ? parsed : (parsed.qaPairs || parsed.pairs || []);
+
+  // 用 Zod 校验
+  const validated = QAPairsSchema.parse({ qaPairs: items });
+  return validated.qaPairs;
 }
 
 /**
@@ -115,41 +189,11 @@ export async function generateQAPairs(
   markdown: string,
   materialType: string
 ): Promise<QAPairResult[]> {
-  const wordCount = markdown.length;
-  const targetCount =
-    wordCount < 1000 ? 4 :
-    wordCount < 3000 ? 8 :
-    wordCount < 5000 ? 18 : 30;
-
-  const prompt = `你是企业知识库QA对生成专家。基于以下材料生成 ${targetCount} 组高质量问答对。
-
-材料类型：${materialType}
-材料内容：
-"""
-${markdown.slice(0, 6000)}
-"""
-
-严格按以下JSON数组格式返回，每个QA对包含6个字段：
-[
-  {
-    "question": "场景化问题（多个问法用/分隔）[入门/进阶/专业]",
-    "answer": "7-8层结构答案（≥400字）：1.核心观点 2.机理解释 3.案例1 4.案例2 5.实操建议4条 6.踩坑预警 7.适用边界 8.可复用公式",
-    "tags": ["标签1", "标签2", "标签3"],
-    "scenarios": "主要适用场景+典型使用者+触发时机",
-    "questionKeywords": ["关键词1","关键词2","关键词3","关键词4","关键词5"],
-    "difficulty": "BEGINNER或INTERMEDIATE或EXPERT"
+  const sections = splitIntoSections(markdown);
+  const results: QAPairResult[] = [];
+  for (const section of sections) {
+    const pairs = await generateQAFromSection(section, materialType);
+    results.push(...pairs);
   }
-]
-
-质量红线：禁止编造数据；无案例时标注[材料未提供案例，此处为逻辑推演]；答案必须含踩坑预警。`;
-
-  const { callLLM } = await import('@/server/services/modelGateway');
-  const result = await callLLM('qa_generation', '', prompt, {
-    maxTokens: 8000,
-    temperature: 0.3,
-  });
-
-  const content = result.content;
-  const parsed = JSON.parse(content);
-  return Array.isArray(parsed) ? parsed : (parsed.pairs || parsed.qa_pairs || []);
+  return results;
 }
