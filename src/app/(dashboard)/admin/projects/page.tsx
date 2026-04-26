@@ -61,7 +61,7 @@ export default function ProjectManagementPage() {
               className="h-9 w-full rounded-lg border pl-9 pr-4 text-sm" />
           </div>
           <div className="flex gap-2">
-            {(projects?.items ?? [{ id: "p1", name: "万华灵荃3.0", status: "ACTIVE" }, { id: "p2", name: "某教育项目", status: "ACTIVE" }]).map((p: any) => (
+            {((projects?.length ? projects : [{ id: "p1", name: "万华灵荃3.0", status: "ACTIVE" }, { id: "p2", name: "某教育项目", status: "ACTIVE" }]) as any[]).map((p: any) => (
               <button key={p.id} onClick={() => setSelectedProject(p.id)}
                 className={`px-4 py-2 rounded-lg text-sm transition ${
                   selectedProject === p.id ? "bg-brand text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"

@@ -10,45 +10,70 @@ interface Project {
 interface ProjectStore {
   currentProject: Project | null;
   projects: Project[];
+  projectId: string | null;
+  recentProjectIds: string[];
   setCurrentProject: (project: Project | null) => void;
   setProjects: (projects: Project[]) => void;
+  setProjectId: (id: string) => void;
+  addToRecent: (id: string) => void;
   clear: () => void;
 }
 
 const initialState = {
-  currentProject: null,
-  projects: [],
+  currentProject: null as Project | null,
+  projects: [] as Project[],
+  projectId: null as string | null,
+  recentProjectIds: [] as string[],
 };
 
 export const useProjectStore = create<ProjectStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...initialState,
-      setCurrentProject: (project) => set({ currentProject: project }),
+      setCurrentProject: (project) => set({
+        currentProject: project,
+        projectId: project?.id ?? null
+      }),
       setProjects: (projects) => set({ projects }),
-      clear: () => set(initialState),
+      setProjectId: (id) => {
+        const project = get().projects.find(p => p.id === id) ?? null;
+        set({
+          projectId: id,
+          currentProject: project ?? (id ? { id, name: '', workspaceId: '' } : null)
+        });
+        // auto-add to recent
+        if (id) {
+          const recent = get().recentProjectIds.filter(rid => rid !== id);
+          set({ recentProjectIds: [id, ...recent].slice(0, 10) });
+        }
+      },
+      addToRecent: (id) => {
+        const recent = get().recentProjectIds.filter(rid => rid !== id);
+        set({ recentProjectIds: [id, ...recent].slice(0, 10) });
+      },
+      clear: () => set({ ...initialState }),
     }),
     {
       name: 'atom-kb-project',
       partialize: (state) => ({
         currentProject: state.currentProject,
         projects: state.projects,
+        projectId: state.projectId,
+        recentProjectIds: state.recentProjectIds,
       }),
-      // 添加状态迁移函数以防万一
       migrate: (persistedState) => {
         if (!persistedState) return initialState;
-
-        // 如果状态结构完全不符合预期，返回初始状态
         if (typeof persistedState !== 'object') {
           return initialState;
         }
-
+        const ps = persistedState as any;
         return {
           ...initialState,
           ...persistedState,
-          // 确保字段类型正确
-          currentProject: (persistedState as any).currentProject || null,
-          projects: Array.isArray((persistedState as any).projects) ? (persistedState as any).projects : []
+          currentProject: ps.currentProject || null,
+          projects: Array.isArray(ps.projects) ? ps.projects : [],
+          projectId: ps.projectId || ps.currentProject?.id || null,
+          recentProjectIds: Array.isArray(ps.recentProjectIds) ? ps.recentProjectIds : [],
         };
       }
     }

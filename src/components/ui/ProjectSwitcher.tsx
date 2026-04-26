@@ -12,28 +12,22 @@ interface ProjectSwitcherProps {
 
 export function ProjectSwitcher({ onProjectChange }: ProjectSwitcherProps) {
   const { data: session } = useSession();
-  const { currentProjectId, setCurrentProjectId, addToRecent } = useProjectStore();
+  const { projectId, setProjectId } = useProjectStore();
 
   const { data: projects } = trpc.project.list.useQuery(undefined, {
     enabled: !!session?.user?.id,
   });
 
   useEffect(() => {
-    // Set default project if none is selected and projects are available
-    if (!currentProjectId && projects?.length > 0) {
-      const firstProject = projects[0];
-      setCurrentProjectId(firstProject.id);
-      addToRecent(firstProject.id);
+    if (!projectId && projects && projects.length > 0) {
+      setProjectId(projects[0].id);
     }
-  }, [projects, currentProjectId, setCurrentProjectId, addToRecent]);
+  }, [projects, projectId, setProjectId]);
 
   const handleProjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const projectId = e.target.value;
-    setCurrentProjectId(projectId);
-    addToRecent(projectId);
-    if (onProjectChange) {
-      onProjectChange(projectId);
-    }
+    const id = e.target.value;
+    setProjectId(id);
+    onProjectChange?.(id);
   };
 
   if (!projects?.length) {
@@ -45,7 +39,7 @@ export function ProjectSwitcher({ onProjectChange }: ProjectSwitcherProps) {
       <label htmlFor="project-select" className="text-sm text-gray-600">项目:</label>
       <select
         id="project-select"
-        value={currentProjectId || ''}
+        value={projectId || ''}
         onChange={handleProjectChange}
         className="border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
       >
